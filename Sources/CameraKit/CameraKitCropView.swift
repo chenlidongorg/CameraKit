@@ -152,3 +152,31 @@ private extension CGRect {
     }
 }
 #endif
+
+
+#Preview {
+    
+    CameraKitLauncherButton(
+        configuration: CameraKitConfiguration(
+            mode: .scan,
+            enableLiveDetectionOverlay: true,
+            allowsPostCaptureCropping: true,
+            enhancement: .auto,
+            allowsPhotoLibraryImport: true,
+            outputQuality: .init(targetResolution: CGSize(width: 2000, height: 2000),
+                                 compressionQuality: 0.8,
+                                 returnOriginalImage: true),
+            context: CameraKitContext(identifier: "invoice", payload: ["source": "home"])
+        ),
+        onResult: { result in
+            // Handle processed image + metadata
+        },
+        onCancel: {
+            // User dismissed the camera
+        },
+        onError: { error in
+            // Present error message
+        }
+    )
+    
+}
