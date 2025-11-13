@@ -7,7 +7,8 @@ let package = Package(
     name: "CameraKit",
     defaultLocalization: "en",
     platforms: [
-        .iOS(.v13)
+        .iOS(.v13),
+        .macOS(.v14)
     ],
     products: [
         .library(
