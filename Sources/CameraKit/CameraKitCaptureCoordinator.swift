@@ -3,12 +3,14 @@ import AVFoundation
 import UIKit
 import Vision
 
+@available(iOS 14.0, *)
 @MainActor protocol CameraKitCaptureCoordinatorDelegate: AnyObject {
     func captureCoordinator(_ coordinator: CameraKitCaptureCoordinator, didUpdate detection: CameraKitQuadrilateral?)
     func captureCoordinator(_ coordinator: CameraKitCaptureCoordinator, didCapture image: UIImage, detection: CameraKitQuadrilateral?)
     func captureCoordinator(_ coordinator: CameraKitCaptureCoordinator, didFail error: CameraKitError)
 }
 
+@available(iOS 14.0, *)
 final class CameraKitCaptureCoordinator: NSObject, ObservableObject {
     enum CaptureState {
         case idle
@@ -206,6 +208,7 @@ final class CameraKitCaptureCoordinator: NSObject, ObservableObject {
     }
 }
 
+@available(iOS 14.0, *)
 extension CameraKitCaptureCoordinator: @unchecked Sendable {}
 
 private enum CameraError: Error {
@@ -213,6 +216,7 @@ private enum CameraError: Error {
     case configurationFailed
 }
 
+@available(iOS 14.0, *)
 extension CameraKitCaptureCoordinator: AVCapturePhotoCaptureDelegate {
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
         if let error {
@@ -239,6 +243,7 @@ extension CameraKitCaptureCoordinator: AVCapturePhotoCaptureDelegate {
     }
 }
 
+@available(iOS 14.0, *)
 extension CameraKitCaptureCoordinator: AVCaptureVideoDataOutputSampleBufferDelegate {
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         guard configuration.enableLiveDetectionOverlay || configuration.mode == .scan else { return }

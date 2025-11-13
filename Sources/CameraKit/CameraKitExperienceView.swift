@@ -3,6 +3,7 @@ import AVFoundation
 import UIKit
 import SwiftUI
 
+@available(iOS 14.0, *)
 struct CameraKitExperienceView: View {
     private let viewModel: CameraKitViewModel
 
@@ -22,6 +23,7 @@ struct CameraKitExperienceView: View {
     }
 }
 
+@available(iOS 14.0, *)
 private struct CameraKitExperienceContent: View {
     @EnvironmentObject private var viewModel: CameraKitViewModel
 
@@ -163,6 +165,7 @@ private struct ProcessingOverlay: View {
     }
 }
 
+@available(iOS 14.0, *)
 private struct DetectionOverlayShape: Shape {
     let quadrilateral: CameraKitQuadrilateral
 
@@ -181,6 +184,7 @@ private struct DetectionOverlayShape: Shape {
     }
 }
 
+@available(iOS 14.0, *)
 @MainActor
 final class CameraKitViewModel: NSObject, ObservableObject {
     @Published var detection: CameraKitQuadrilateral?
@@ -319,6 +323,7 @@ final class CameraKitViewModel: NSObject, ObservableObject {
     }
 }
 
+@available(iOS 14.0, *)
 extension CameraKitViewModel: CameraKitCaptureCoordinatorDelegate {
     func captureCoordinator(_ coordinator: CameraKitCaptureCoordinator, didUpdate detection: CameraKitQuadrilateral?) {
         self.detection = detection

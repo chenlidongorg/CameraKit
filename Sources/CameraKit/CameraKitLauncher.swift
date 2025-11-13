@@ -2,6 +2,9 @@ import SwiftUI
 
 #if canImport(UIKit) && (os(iOS) || targetEnvironment(macCatalyst))
 import UIKit
+
+
+@available(iOS 14.0, *)
 public struct CameraKitLauncher<Label: View>: View {
     @State private var isPresenting = false
     private let configuration: CameraKitConfiguration
@@ -41,6 +44,7 @@ public struct CameraKitLauncher<Label: View>: View {
     }
 }
 
+@available(iOS 14.0, *)
 public struct CameraKitLauncherButton: View {
     private let configuration: CameraKitConfiguration
     private let onResult: (CameraKitResult) -> Void
@@ -81,6 +85,7 @@ struct CameraKitDefaultButton: View {
     }
 }
 
+@available(iOS 14.0, *)
 private extension View {
     func cameraKitFullScreenCover<Content: View>(isPresented: Binding<Bool>,
                                                  @ViewBuilder content: @escaping () -> Content) -> some View {
@@ -88,6 +93,7 @@ private extension View {
     }
 }
 
+@available(iOS 14.0, *)
 private struct CameraKitFullScreenCoverModifier<PresentedContent: View>: ViewModifier {
     @Binding var isPresented: Bool
     let presentedContent: () -> PresentedContent
@@ -103,6 +109,7 @@ private struct CameraKitFullScreenCoverModifier<PresentedContent: View>: ViewMod
     }
 }
 
+@available(iOS 14.0, *)
 private struct LegacyFullScreenCover<PresentedContent: View>: UIViewControllerRepresentable {
     @Binding var isPresented: Bool
     let content: () -> PresentedContent

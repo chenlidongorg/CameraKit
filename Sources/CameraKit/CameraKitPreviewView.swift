@@ -2,6 +2,7 @@
 import AVFoundation
 import SwiftUI
 
+@available(iOS 14.0, *)
 struct CameraKitPreviewView: UIViewRepresentable {
     let session: AVCaptureSession
 
@@ -17,6 +18,7 @@ struct CameraKitPreviewView: UIViewRepresentable {
     }
 }
 
+@available(iOS 14.0, *)
 final class PreviewView: UIView {
     override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
     var videoPreviewLayer: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
