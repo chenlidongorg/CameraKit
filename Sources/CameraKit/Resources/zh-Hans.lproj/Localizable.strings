@@ -1,0 +1,16 @@
+"camera_kit_default_button" = "拍摄";
+"camera_kit_capture" = "快门";
+"camera_kit_cancel" = "取消";
+"camera_kit_crop_title" = "调整裁剪";
+"camera_kit_crop_done" = "完成";
+"camera_kit_crop_reset" = "重置";
+"camera_kit_permission_denied" = "需要相机权限，请前往设置中开启。";
+"camera_kit_error_generic" = "发生错误，请重试。";
+"camera_kit_album_import" = "从相册导入";
+"camera_kit_processing" = "处理中…";
+"camera_kit_camera_unavailable" = "当前设备不支持相机。";
+"camera_kit_live_detection" = "请将文档对齐在框内";
+"camera_kit_flip_camera" = "翻转";
+"camera_kit_flash_auto" = "自动";
+"camera_kit_flash_on" = "开启";
+"camera_kit_flash_off" = "关闭";

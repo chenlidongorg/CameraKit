@@ -1,0 +1,16 @@
+"camera_kit_default_button" = "Capture";
+"camera_kit_capture" = "Shutter";
+"camera_kit_cancel" = "Cancel";
+"camera_kit_crop_title" = "Adjust Crop";
+"camera_kit_crop_done" = "Done";
+"camera_kit_crop_reset" = "Reset";
+"camera_kit_permission_denied" = "Camera access is required. Please enable it in Settings.";
+"camera_kit_error_generic" = "Something went wrong. Please try again.";
+"camera_kit_album_import" = "Import from Photos";
+"camera_kit_processing" = "Processing…";
+"camera_kit_camera_unavailable" = "Camera is not available on this device.";
+"camera_kit_live_detection" = "Align document inside the frame";
+"camera_kit_flip_camera" = "Flip";
+"camera_kit_flash_auto" = "Auto";
+"camera_kit_flash_on" = "On";
+"camera_kit_flash_off" = "Off";
