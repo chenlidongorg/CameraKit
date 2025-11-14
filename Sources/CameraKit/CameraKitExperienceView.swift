@@ -849,6 +849,20 @@ final class CameraKitViewModel: NSObject, ObservableObject {
         return configuration.mode == .realTime
     }
 
+    private func logLiveCropImageInfo(image: UIImage, normalized: UIImage) {
+        guard shouldLogLiveCrop else { return }
+        let originalPixels = image.cgImage.map { "\($0.width)x\($0.height)" } ?? "nil"
+        let normalizedPixels = normalized.cgImage.map { "\($0.width)x\($0.height)" } ?? "nil"
+        let message = """
+[CameraKit][LiveCrop] originalSize=\(image.size), originalScale=\(image.scale), \
+originalOrientation=\(image.imageOrientation.rawValue), originalPixels=\(originalPixels), \
+orientationAdjustedSize=\(image.orientationAdjustedSize), \
+normalizedSize=\(normalized.size), normalizedScale=\(normalized.scale), \
+normalizedPixels=\(normalizedPixels)
+"""
+        print(message)
+    }
+
     private func logLiveCropDebug(sourceRect: CGRect,
                                   previewRect: CGRect,
                                   scaledRect: CGRect,
@@ -888,10 +902,12 @@ extension CameraKitViewModel: CameraKitCaptureCoordinatorDelegate {
         Task { @MainActor in
             self.isProcessing = false
             if configuration.mode == .realTime {
-                freezePreview(with: image.fixOrientation())
+                let normalizedImage = image.fixOrientation()
+                logLiveCropImageInfo(image: image, normalized: normalizedImage)
+                freezePreview(with: normalizedImage)
                 let rect = liveCropRectForImage(imageSize: image.orientationAdjustedSize)
                 let quad = CameraKitQuadrilateral.axisAligned(from: rect)
-                self.process(image: image,
+                self.process(image: normalizedImage,
                              detection: nil,
                              manualRectangle: quad,
                              isFromLibrary: false)
