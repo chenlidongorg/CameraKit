@@ -139,7 +139,10 @@ private struct CameraKitExperienceContent: View {
                 CameraKitNormalizedCropOverlay(cropRect: $viewModel.liveCropRect,
                                                dimmingColor: Color.black.opacity(0.1),
                                                strokeColor: .yellow,
-                                               handleColor: .white)
+                                               handleColor: .white,
+                                               onGeometryChange: { size in
+                                                   viewModel.updateCropOverlaySize(size)
+                                               })
                     .ignoresSafeArea()
             }
 
@@ -441,6 +444,7 @@ final class CameraKitViewModel: NSObject, ObservableObject {
     #endif
     @Published var liveCropRect: CGRect = CGRect(x: 0.1, y: 0.1, width: 0.8, height: 0.8)
     @Published private(set) var previewSize: CGSize = .zero
+    @Published private(set) var cropOverlaySize: CGSize = .zero
     @Published private(set) var frozenPreviewImage: UIImage?
     @Published private(set) var isPreviewFrozen = false
 
@@ -540,16 +544,17 @@ final class CameraKitViewModel: NSObject, ObservableObject {
     }
 
     private func liveCropRectForImage(imageSize: CGSize) -> CGRect {
-        guard previewSize.width > 0,
-              previewSize.height > 0,
+        let canvasSize = cropOverlaySize.width > 0 && cropOverlaySize.height > 0 ? cropOverlaySize : previewSize
+        guard canvasSize.width > 0,
+              canvasSize.height > 0,
               imageSize.width > 0,
               imageSize.height > 0 else {
             return liveCropRect.clampedRect()
         }
 
         let rect = liveCropRect.clampedRect()
-        let viewRect = rect.denormalized(in: previewSize)
-        let previewAspect = previewSize.width / previewSize.height
+        let viewRect = rect.denormalized(in: canvasSize)
+        let previewAspect = canvasSize.width / canvasSize.height
         let imageAspect = imageSize.width / imageSize.height
 
         var scale: CGFloat
@@ -557,13 +562,13 @@ final class CameraKitViewModel: NSObject, ObservableObject {
         var offsetY: CGFloat = 0
 
         if imageAspect > previewAspect {
-            scale = previewSize.height / imageSize.height
+            scale = canvasSize.height / imageSize.height
             let scaledWidth = imageSize.width * scale
-            offsetX = (scaledWidth - previewSize.width) / 2
+            offsetX = (scaledWidth - canvasSize.width) / 2
         } else {
-            scale = previewSize.width / imageSize.width
+            scale = canvasSize.width / imageSize.width
             let scaledHeight = imageSize.height * scale
-            offsetY = (scaledHeight - previewSize.height) / 2
+            offsetY = (scaledHeight - canvasSize.height) / 2
         }
 
         let scaledRect = CGRect(x: viewRect.origin.x + offsetX,
@@ -579,6 +584,7 @@ final class CameraKitViewModel: NSObject, ObservableObject {
                                 width: imageRect.width / imageSize.width,
                                 height: imageRect.height / imageSize.height)
         logLiveCropDebug(sourceRect: rect,
+                         canvasSize: canvasSize,
                          previewRect: viewRect,
                          scaledRect: scaledRect,
                          imageRect: imageRect,
@@ -624,6 +630,13 @@ final class CameraKitViewModel: NSObject, ObservableObject {
         guard size.width > 0, size.height > 0 else { return }
         if previewSize != size {
             previewSize = size
+        }
+    }
+
+    func updateCropOverlaySize(_ size: CGSize) {
+        guard size.width > 0, size.height > 0 else { return }
+        if cropOverlaySize != size {
+            cropOverlaySize = size
         }
     }
 
@@ -864,6 +877,7 @@ normalizedPixels=\(normalizedPixels)
     }
 
     private func logLiveCropDebug(sourceRect: CGRect,
+                                  canvasSize: CGSize,
                                   previewRect: CGRect,
                                   scaledRect: CGRect,
                                   imageRect: CGRect,
@@ -873,7 +887,7 @@ normalizedPixels=\(normalizedPixels)
                                   imageSize: CGSize) {
         guard shouldLogLiveCrop else { return }
         let message = """
-[CameraKit][LiveCrop] previewSize=\(previewSize), imageSize=\(imageSize), scale=\(scale), \
+[CameraKit][LiveCrop] overlaySize=\(canvasSize), imageSize=\(imageSize), scale=\(scale), \
 offsetX=\(offsets.x), offsetY=\(offsets.y), liveRect(normalized)=\(sourceRect), previewRect=\(previewRect), \
 scaledRect=\(scaledRect), imageRect=\(imageRect), normalizedRect=\(normalizedRect)
 """
