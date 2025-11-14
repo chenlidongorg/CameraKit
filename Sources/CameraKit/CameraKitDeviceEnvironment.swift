@@ -1,7 +1,5 @@
 #if canImport(UIKit) && (os(iOS) || targetEnvironment(macCatalyst))
-#if !targetEnvironment(macCatalyst)
 import AVFoundation
-#endif
 import UIKit
 #if canImport(VisionKit)
 import VisionKit

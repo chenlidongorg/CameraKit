@@ -33,16 +33,13 @@ public enum CameraKitFlashMode: Equatable, CaseIterable, Sendable {
 public struct CameraKitOutputQuality: Equatable, Sendable {
     public var targetResolution: CGSize?
     public var compressionQuality: CGFloat
-    public var returnOriginalImage: Bool
     public var maxOutputWidth: CGFloat?
 
     public init(targetResolution: CGSize? = nil,
                 compressionQuality: CGFloat = 0.85,
-                returnOriginalImage: Bool = false,
                 maxOutputWidth: CGFloat? = nil) {
         self.targetResolution = targetResolution
         self.compressionQuality = min(max(compressionQuality, 0.0), 1.0)
-        self.returnOriginalImage = returnOriginalImage
         self.maxOutputWidth = maxOutputWidth
     }
 }

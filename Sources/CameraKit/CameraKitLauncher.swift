@@ -9,17 +9,20 @@ public struct CameraKitLauncher<Label: View>: View {
     @State private var isPresenting = false
     private let configuration: CameraKitConfiguration
     private let onResult: ([UIImage]) -> Void
+    private let onOriginalImageResult: (([UIImage]) -> Void)?
     private let onCancel: () -> Void
     private let onError: (CameraKitError) -> Void
     private let label: () -> Label
 
     public init(configuration: CameraKitConfiguration,
                 onResult: @escaping ([UIImage]) -> Void,
+                onOriginalImageResult: (([UIImage]) -> Void)? = nil,
                 onCancel: @escaping () -> Void = {},
                 onError: @escaping (CameraKitError) -> Void,
                 @ViewBuilder label: @escaping () -> Label) {
         self.configuration = configuration
         self.onResult = onResult
+        self.onOriginalImageResult = onOriginalImageResult
         self.onCancel = onCancel
         self.onError = onError
         self.label = label
@@ -33,6 +36,8 @@ public struct CameraKitLauncher<Label: View>: View {
             CameraKitExperienceView(configuration: configuration) { result in
                 isPresenting = false
                 onResult(result)
+            } onOriginalImageResult: { originals in
+                onOriginalImageResult?(originals)
             } onCancel: {
                 isPresenting = false
                 onCancel()
@@ -48,15 +53,18 @@ public struct CameraKitLauncher<Label: View>: View {
 public struct CameraKitLauncherButton: View {
     private let configuration: CameraKitConfiguration
     private let onResult: ([UIImage]) -> Void
+    private let onOriginalImageResult: (([UIImage]) -> Void)?
     private let onCancel: () -> Void
     private let onError: (CameraKitError) -> Void
 
     public init(configuration: CameraKitConfiguration,
                 onResult: @escaping ([UIImage]) -> Void,
+                onOriginalImageResult: (([UIImage]) -> Void)? = nil,
                 onCancel: @escaping () -> Void = {},
                 onError: @escaping (CameraKitError) -> Void) {
         self.configuration = configuration
         self.onResult = onResult
+        self.onOriginalImageResult = onOriginalImageResult
         self.onCancel = onCancel
         self.onError = onError
     }
@@ -64,6 +72,7 @@ public struct CameraKitLauncherButton: View {
     public var body: some View {
         CameraKitLauncher(configuration: configuration,
                           onResult: onResult,
+                          onOriginalImageResult: onOriginalImageResult,
                           onCancel: onCancel,
                           onError: onError) {
             CameraKitDefaultButton()

@@ -24,7 +24,7 @@ CameraKit 是一个面向 Swift / SwiftUI 应用的拍摄与扫描组件，提�
 | `allowsPostCaptureCropping` | 是否在结果页弹出手动裁剪。 | 可选 | `.photoWithCrop` 模式默认开启，其余模式按需设置。 |
 | `enhancement` | 输出增强策略：`.none` / `.auto` / `.grayscale`。 | 可选 | 默认 `.auto`。 |
 | `allowsPhotoLibraryImport` | 是否允许从相册替换。 | 可选 | 默认 `false`。 |
-| `outputQuality` | 控制分辨率、压缩率、是否返回原图，以及 `targetResolution` / `maxOutputWidth` 等比缩放策略。 | 可选 | 默认压缩率 `0.85`，`targetResolution` / `maxOutputWidth` 默认为 `nil`：若设置 `maxOutputWidth`，最终宽度被限制在该值内，高度按比例缩放；若未设置宽度而提供 `targetResolution`，则会按“scale to fit”方式将图片缩小进指定盒子——即仅做等比缩放不会填充留白、不会裁切，示例：目标 300×600、原图 400×900 时，最终尺寸 ≈266×600。 |
+| `outputQuality` | 控制分辨率、压缩率，以及 `targetResolution` / `maxOutputWidth` 等比缩放策略。 | 可选 | 默认压缩率 `0.85`，`targetResolution` / `maxOutputWidth` 默认为 `nil`：若设置 `maxOutputWidth`，最终宽度被限制在该值内，高度按比例缩放；若未设置宽度而提供 `targetResolution`，则会按“scale to fit”方式将图片缩小进指定盒子——即仅做等比缩放不会填充留白、不会裁切，示例：目标 300×600、原图 400×900 时，最终尺寸 ≈266×600。 |
 | `defaultFlashMode` | `.auto` / `.on` / `.off`。 | 可选 | 默认 `.auto`，控制快门首次打开时的闪光灯行为。 |
 | `context` | 业务侧上下文，在回调中回传。 | 可选 | 用于区分不同入口或携带额外数据。 |
 
@@ -36,6 +36,7 @@ CameraKit 是一个面向 Swift / SwiftUI 应用的拍摄与扫描组件，提�
 ## 回调数据
 
 - `onResult([UIImage])`：返回按照选择顺序处理好的所有图片（已校正方向，可选缩放宽度）。
+- `onOriginalImageResult?([UIImage])`：可选回调。若传入该闭包，则会额外收到“未处理”的原始图片数组（顺序与 `onResult` 一致）；未提供闭包时则默认不回传原图，避免不必要的内存与带宽开销。
 - `onCancel()`：用户主动关闭或返回。
 - `onError(CameraKitError)`：包含 `permissionDenied`、`cameraUnavailable`、`captureFailed`、`processingFailed` 等类型，便于友好提示。
 
@@ -72,13 +73,15 @@ struct ScanActionView: View {
                 outputQuality: .init(
                     targetResolution: nil,
                     compressionQuality: 0.85,
-                    returnOriginalImage: false,
                     maxOutputWidth: 2048
                 ),
                 context: CameraKitContext(identifier: "invoice", payload: ["source": "首页入口"])
             ),
             onResult: { images in
                 // 处理扫描结果，images 为自动矫正后的数组
+            },
+            onOriginalImageResult: { originals in
+                // 如需保存/另行处理原图，在这里拿到同顺序的原始数组
             },
             onCancel: {
                 // 关闭或返回后的兜底逻辑

@@ -21,10 +21,12 @@ struct CameraKitExperienceView: View {
 
     init(configuration: CameraKitConfiguration,
          onResult: @escaping ([UIImage]) -> Void,
+         onOriginalImageResult: (([UIImage]) -> Void)? = nil,
          onCancel: @escaping () -> Void,
          onError: @escaping (CameraKitError) -> Void) {
         self.viewModel = CameraKitViewModel(configuration: configuration,
                                             onResult: onResult,
+                                            onOriginalImageResult: onOriginalImageResult,
                                             onCancel: onCancel,
                                             onError: onError)
     }
@@ -405,6 +407,7 @@ final class CameraKitViewModel: NSObject, ObservableObject {
     let configuration: CameraKitConfiguration
     let flow: Flow
     private let onResult: ([UIImage]) -> Void
+    private let onOriginalImageResult: (([UIImage]) -> Void)?
     private let onCancel: () -> Void
     private let onError: (CameraKitError) -> Void
     private let captureCoordinator: CameraKitCaptureCoordinator?
@@ -438,10 +441,12 @@ final class CameraKitViewModel: NSObject, ObservableObject {
 
     init(configuration: CameraKitConfiguration,
          onResult: @escaping ([UIImage]) -> Void,
+         onOriginalImageResult: (([UIImage]) -> Void)? = nil,
          onCancel: @escaping () -> Void,
          onError: @escaping (CameraKitError) -> Void) {
         self.configuration = configuration
         self.onResult = onResult
+        self.onOriginalImageResult = onOriginalImageResult
         self.onCancel = onCancel
         self.onError = onError
         let resolvedFlow = CameraKitViewModel.resolveFlow(for: configuration)
@@ -689,6 +694,7 @@ final class CameraKitViewModel: NSObject, ObservableObject {
                 }
                 isProcessing = false
                 onResult(processed)
+                onOriginalImageResult?(images)
             } catch let error as CameraKitError {
                 handleProcessingFailure(error: error)
             } catch {
