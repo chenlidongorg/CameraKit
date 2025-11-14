@@ -7,6 +7,7 @@
 "camera_kit_permission_denied" = "需要相机权限，请前往设置中开启。";
 "camera_kit_error_generic" = "发生错误，请重试。";
 "camera_kit_album_import" = "从相册导入";
+"camera_kit_file_import" = "从文件导入";
 "camera_kit_processing" = "处理中…";
 "camera_kit_camera_unavailable" = "当前设备不支持相机。";
 "camera_kit_live_detection" = "请将文档对齐在框内";
@@ -14,3 +15,10 @@
 "camera_kit_flash_auto" = "自动";
 "camera_kit_flash_on" = "开启";
 "camera_kit_flash_off" = "关闭";
+"camera_kit_scanner_launching" = "正在打开扫描器…";
+"camera_kit_picker_title" = "选择内容来源";
+"camera_kit_picker_subtitle" = "当前无法拍摄，将改为使用相册或文件中的内容。";
+"camera_kit_picker_multi_hint" = "可多选";
+"camera_kit_picker_single_hint" = "仅可单选";
+"camera_kit_select_device" = "选择拍摄设备";
+"camera_kit_use_current_device" = "继续使用本机";

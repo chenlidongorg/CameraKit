@@ -28,6 +28,7 @@ final class CameraKitCaptureCoordinator: NSObject, ObservableObject {
     private var isPerformingDetectionStorage = false
     private var isSessionConfigured = false
     private var currentFlashMode: CameraKitFlashMode
+    private var preferredDeviceID: String?
     private(set) var cameraPosition: AVCaptureDevice.Position = .back
     private let configuration: CameraKitConfiguration
     weak var delegate: CameraKitCaptureCoordinatorDelegate?
@@ -97,6 +98,7 @@ final class CameraKitCaptureCoordinator: NSObject, ObservableObject {
     func flipCamera() {
         sessionQueue.async { [weak self] in
             guard let self else { return }
+            self.preferredDeviceID = nil
             let newPosition: AVCaptureDevice.Position = self.cameraPosition == .back ? .front : .back
             guard let device = self.device(for: newPosition) else { return }
             do {
@@ -122,11 +124,19 @@ final class CameraKitCaptureCoordinator: NSObject, ObservableObject {
         }
     }
 
+    func selectDevice(with uniqueID: String) {
+        sessionQueue.async { [weak self] in
+            guard let self else { return }
+            self.preferredDeviceID = uniqueID
+            self.reconfigureSessionForPreferredDevice()
+        }
+    }
+
     private func configureSession() throws {
         session.beginConfiguration()
         session.sessionPreset = .photo
 
-        guard let device = device(for: cameraPosition) else { throw CameraError.missingDevice }
+        guard let device = preferredDeviceID.flatMap({ AVCaptureDevice(uniqueID: $0) }) ?? device(for: cameraPosition) else { throw CameraError.missingDevice }
         let videoInput = try AVCaptureDeviceInput(device: device)
         guard session.canAddInput(videoInput) else { throw CameraError.configurationFailed }
         session.addInput(videoInput)
@@ -136,7 +146,9 @@ final class CameraKitCaptureCoordinator: NSObject, ObservableObject {
         session.addOutput(photoOutput)
         photoOutput.isHighResolutionCaptureEnabled = true
 
-        if configuration.enableLiveDetectionOverlay || configuration.mode == .scan {
+        if configuration.enableLiveDetectionOverlay
+            || configuration.mode == .scanSingle
+            || configuration.mode == .scanBatch {
             videoDataOutput.setSampleBufferDelegate(self, queue: detectionQueue)
             videoDataOutput.alwaysDiscardsLateVideoFrames = true
             videoDataOutput.videoSettings = [
@@ -151,6 +163,31 @@ final class CameraKitCaptureCoordinator: NSObject, ObservableObject {
         }
 
         session.commitConfiguration()
+    }
+
+    private func reconfigureSessionForPreferredDevice() {
+        guard let preferredDeviceID,
+              let device = AVCaptureDevice(uniqueID: preferredDeviceID) else { return }
+        do {
+            let input = try AVCaptureDeviceInput(device: device)
+            session.beginConfiguration()
+            if let currentInput = videoDeviceInput {
+                session.removeInput(currentInput)
+            }
+            if session.canAddInput(input) {
+                session.addInput(input)
+                videoDeviceInput = input
+                cameraPosition = device.position
+                latestDetectionValue = nil
+                dispatchToMain { [weak self] in
+                    guard let self else { return }
+                    self.delegate?.captureCoordinator(self, didUpdate: nil)
+                }
+            }
+            session.commitConfiguration()
+        } catch {
+            notifyCameraUnavailable()
+        }
     }
 
     private func device(for position: AVCaptureDevice.Position) -> AVCaptureDevice? {
@@ -246,7 +283,9 @@ extension CameraKitCaptureCoordinator: AVCapturePhotoCaptureDelegate {
 @available(iOS 14.0, *)
 extension CameraKitCaptureCoordinator: AVCaptureVideoDataOutputSampleBufferDelegate {
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        guard configuration.enableLiveDetectionOverlay || configuration.mode == .scan else { return }
+        guard configuration.enableLiveDetectionOverlay
+                || configuration.mode == .scanSingle
+                || configuration.mode == .scanBatch else { return }
         guard !isPerformingDetectionValue else { return }
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 

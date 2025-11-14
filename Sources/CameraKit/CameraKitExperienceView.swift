@@ -2,13 +2,25 @@
 import AVFoundation
 import UIKit
 import SwiftUI
+#if canImport(PhotosUI)
+import PhotosUI
+#endif
+#if canImport(UniformTypeIdentifiers)
+import UniformTypeIdentifiers
+#endif
+#if canImport(MobileCoreServices)
+import MobileCoreServices
+#endif
+#if canImport(VisionKit)
+import VisionKit
+#endif
 
 @available(iOS 14.0, *)
 struct CameraKitExperienceView: View {
     private let viewModel: CameraKitViewModel
 
     init(configuration: CameraKitConfiguration,
-         onResult: @escaping (CameraKitResult) -> Void,
+         onResult: @escaping ([UIImage]) -> Void,
          onCancel: @escaping () -> Void,
          onError: @escaping (CameraKitError) -> Void) {
         self.viewModel = CameraKitViewModel(configuration: configuration,
@@ -29,17 +41,7 @@ private struct CameraKitExperienceContent: View {
 
     var body: some View {
         ZStack {
-            CameraKitPreviewView(session: viewModel.session)
-                .edgesIgnoringSafeArea(.all)
-
-            if viewModel.configuration.enableLiveDetectionOverlay, let detection = viewModel.detection {
-                DetectionOverlayShape(quadrilateral: detection)
-                    .stroke(Color.green.opacity(0.8), lineWidth: 2)
-                    .padding()
-            }
-
-            overlayControls
-
+            flowView
             if viewModel.isProcessing {
                 ProcessingOverlay()
             }
@@ -53,18 +55,102 @@ private struct CameraKitExperienceContent: View {
                                   viewModel.commitManualCrop(rect: rect, captureID: context.id)
                               })
         }
+        #if canImport(PhotosUI)
         .sheet(isPresented: $viewModel.isPhotoPickerPresented) {
-            SystemImagePicker(onPick: { image in
-                viewModel.handleImportedImage(image)
-            }, onCancel: {
-                viewModel.isPhotoPickerPresented = false
-            })
+            if #available(iOS 14.0, macCatalyst 14.0, *) {
+                SystemImagePicker(selectionLimit: viewModel.photoPickerSelectionLimit) { images in
+                    viewModel.handleImportedImages(images)
+                } onCancel: {
+                    viewModel.isPhotoPickerPresented = false
+                }
+            } else {
+                EmptyView()
+            }
+        }
+        #endif
+        .sheet(isPresented: $viewModel.isFileImporterPresented) {
+            SystemFilePicker(allowsMultipleSelection: viewModel.flow.allowsMultipleSelection) { urls in
+                viewModel.handleImportedFiles(urls: urls)
+            } onCancel: {
+                viewModel.isFileImporterPresented = false
+            }
         }
         .alert(item: $viewModel.alert) { alert in
             Alert(title: Text(alert.title), message: Text(alert.message), dismissButton: .default(Text("OK")))
         }
+        #if !targetEnvironment(macCatalyst)
+        .actionSheet(isPresented: Binding(get: {
+            viewModel.continuityPrompt != nil
+        }, set: { newValue in
+            if !newValue {
+                viewModel.dismissContinuityPrompt()
+            }
+        })) {
+            let title = Text(CameraKitLocalization.string("camera_kit_select_device"))
+            let devices = viewModel.continuityPrompt?.devices ?? []
+            var buttons: [ActionSheet.Button] = devices.map { device in
+                .default(Text(device.localizedName)) {
+                    viewModel.useContinuityDevice(device)
+                }
+            }
+            buttons.append(.cancel {
+                viewModel.dismissContinuityPrompt()
+            })
+            return ActionSheet(title: title, buttons: buttons)
+        }
+        #endif
         .onAppear { viewModel.start() }
         .onDisappear { viewModel.stop() }
+    }
+
+    @ViewBuilder
+    private var cameraExperience: some View {
+        ZStack {
+            if let session = viewModel.session {
+                CameraKitPreviewView(session: session)
+                    .edgesIgnoringSafeArea(.all)
+            } else {
+                Color.black.edgesIgnoringSafeArea(.all)
+            }
+
+            if viewModel.configuration.enableLiveDetectionOverlay, let detection = viewModel.detection {
+                DetectionOverlayShape(quadrilateral: detection)
+                    .stroke(Color.green.opacity(0.8), lineWidth: 2)
+                    .padding()
+            }
+
+            if viewModel.configuration.mode == .realTime {
+                CameraKitNormalizedCropOverlay(cropRect: $viewModel.liveCropRect,
+                                               dimmingColor: Color.black.opacity(0.25),
+                                               strokeColor: .yellow,
+                                               handleColor: .white)
+                    .padding()
+            }
+
+            overlayControls
+        }
+    }
+
+    @ViewBuilder
+    private var flowView: some View {
+        switch viewModel.flow {
+        case .camera:
+            cameraExperience
+        case .scannerSingle:
+            #if canImport(VisionKit)
+            CameraKitScannerFlowView(allowsMultiple: false)
+            #else
+            ScannerPlaceholderView()
+            #endif
+        case .scannerBatch:
+            #if canImport(VisionKit)
+            CameraKitScannerFlowView(allowsMultiple: true)
+            #else
+            ScannerPlaceholderView()
+            #endif
+        case .picker(let allowsMultiple):
+            PickerFallbackView(allowsMultiple: allowsMultiple)
+        }
     }
 
     private var overlayControls: some View {
@@ -122,7 +208,7 @@ private struct CameraKitExperienceContent: View {
 
     private var bottomBar: some View {
         HStack(spacing: 24) {
-            if viewModel.configuration.allowsPhotoLibraryImport {
+            if viewModel.shouldShowPhotoLibraryButton {
                 Button(action: { viewModel.presentPhotoPicker() }) {
                     VStack {
                         Image(systemName: "photo.on.rectangle")
@@ -146,6 +232,116 @@ private struct CameraKitExperienceContent: View {
 
         }
         .frame(maxWidth: .infinity)
+    }
+}
+
+@available(iOS 14.0, *)
+private struct ScannerPlaceholderView: View {
+    var body: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+            Text(CameraKitLocalization.string("camera_kit_scanner_launching"))
+                .foregroundColor(.secondary)
+        }
+    }
+}
+
+@available(iOS 14.0, *)
+private struct PickerFallbackView: View {
+    @EnvironmentObject private var viewModel: CameraKitViewModel
+    let allowsMultiple: Bool
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Text(CameraKitLocalization.string("camera_kit_picker_title"))
+                .font(.headline)
+
+            Text(CameraKitLocalization.string("camera_kit_picker_subtitle"))
+                .font(.subheadline)
+                .multilineTextAlignment(.center)
+                .foregroundColor(.secondary)
+
+            VStack(spacing: 12) {
+                if viewModel.supportsPhotoPicker {
+                    Button {
+                        viewModel.presentPhotoPicker(allowsMultiple: allowsMultiple)
+                    } label: {
+                        pickerButtonLabel(systemName: "photo.on.rectangle.angled",
+                                          title: CameraKitLocalization.string("camera_kit_album_import"))
+                    }
+                }
+                Button {
+                    viewModel.presentFileImporter()
+                } label: {
+                    pickerButtonLabel(systemName: "folder",
+                                      title: CameraKitLocalization.string("camera_kit_file_import"))
+                }
+            }
+
+            Button(CameraKitLocalization.string("camera_kit_cancel")) {
+                viewModel.cancelFlow()
+            }
+            .foregroundColor(.red)
+        }
+        .padding()
+    }
+
+    @ViewBuilder
+    private func pickerButtonLabel(systemName: String, title: String) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemName)
+                .font(.title2)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).bold()
+                Text(allowsMultiple
+                     ? CameraKitLocalization.string("camera_kit_picker_multi_hint")
+                     : CameraKitLocalization.string("camera_kit_picker_single_hint"))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding()
+        .frame(maxWidth: .infinity)
+        .background(RoundedRectangle(cornerRadius: 14).fill(Color(.secondarySystemBackground)))
+    }
+}
+
+private extension Array {
+    func element(at index: Int) -> Element? {
+        guard indices.contains(index) else { return nil }
+        return self[index]
+    }
+}
+
+#if canImport(VisionKit)
+@available(iOS 14.0, *)
+private struct CameraKitScannerFlowView: View {
+    @EnvironmentObject private var viewModel: CameraKitViewModel
+    let allowsMultiple: Bool
+
+    var body: some View {
+        CameraKitDocumentScannerView { images in
+            viewModel.handleScannedImages(images, allowsMultiple: allowsMultiple)
+        } onCancel: {
+            viewModel.cancelFlow()
+        } onError: { error in
+            viewModel.handleScannerError(error)
+        }
+    }
+}
+#endif
+@available(iOS 14.0, *)
+private extension CameraKitViewModel.Flow {
+    var allowsMultipleSelection: Bool {
+        switch self {
+        case .picker(let allowsMultiple):
+            return allowsMultiple
+        case .scannerBatch:
+            return true
+        default:
+            return false
+        }
     }
 }
 
@@ -187,24 +383,42 @@ private struct DetectionOverlayShape: Shape {
 @available(iOS 14.0, *)
 @MainActor
 final class CameraKitViewModel: NSObject, ObservableObject {
+    enum Flow: Equatable {
+        case camera
+        case scannerSingle
+        case scannerBatch
+        case picker(allowsMultiple: Bool)
+    }
+
     @Published var detection: CameraKitQuadrilateral?
     @Published var isProcessing = false
     @Published var isPhotoPickerPresented = false
+    @Published var isFileImporterPresented = false
     @Published var manualCropContext: ManualCropContext?
     @Published var alert: CameraAlert?
     @Published private(set) var flashMode: CameraKitFlashMode
+    #if !targetEnvironment(macCatalyst)
+    @Published var continuityPrompt: ContinuityPrompt?
+    #endif
+    @Published var liveCropRect: CGRect = CGRect(x: 0.1, y: 0.1, width: 0.8, height: 0.8)
 
     let configuration: CameraKitConfiguration
-    private let onResult: (CameraKitResult) -> Void
+    let flow: Flow
+    private let onResult: ([UIImage]) -> Void
     private let onCancel: () -> Void
     private let onError: (CameraKitError) -> Void
-    private let captureCoordinator: CameraKitCaptureCoordinator
+    private let captureCoordinator: CameraKitCaptureCoordinator?
+    #if !targetEnvironment(macCatalyst)
+    private let continuityDevices: [AVCaptureDevice]
+    #endif
+    private var currentPhotoPickerSelectionLimit = 1
 
     struct ManualCropContext: Identifiable {
         let id = UUID()
         let image: UIImage
         let initialRect: CGRect
         let detection: CameraKitQuadrilateral?
+        let isFromLibrary: Bool
     }
 
     struct CameraAlert: Identifiable {
@@ -213,20 +427,60 @@ final class CameraKitViewModel: NSObject, ObservableObject {
         let message: String
     }
 
-    var session: AVCaptureSession { captureCoordinator.session }
+    #if !targetEnvironment(macCatalyst)
+    struct ContinuityPrompt: Identifiable {
+        let id = UUID()
+        let devices: [AVCaptureDevice]
+    }
+    #endif
+
+    var session: AVCaptureSession? { captureCoordinator?.session }
 
     init(configuration: CameraKitConfiguration,
-         onResult: @escaping (CameraKitResult) -> Void,
+         onResult: @escaping ([UIImage]) -> Void,
          onCancel: @escaping () -> Void,
          onError: @escaping (CameraKitError) -> Void) {
         self.configuration = configuration
         self.onResult = onResult
         self.onCancel = onCancel
         self.onError = onError
-        self.captureCoordinator = CameraKitCaptureCoordinator(configuration: configuration)
+        let resolvedFlow = CameraKitViewModel.resolveFlow(for: configuration)
+        self.flow = resolvedFlow
+        if case .camera = resolvedFlow {
+            let coordinator = CameraKitCaptureCoordinator(configuration: configuration)
+            self.captureCoordinator = coordinator
+        } else {
+            self.captureCoordinator = nil
+        }
+#if !targetEnvironment(macCatalyst)
+        self.continuityDevices = CameraKitDeviceEnvironment.externalCameraDevices()
+#endif
         self.flashMode = configuration.defaultFlashMode
         super.init()
-        captureCoordinator.delegate = self
+        captureCoordinator?.delegate = self
+    }
+
+    private static func resolveFlow(for configuration: CameraKitConfiguration) -> Flow {
+        switch configuration.mode {
+        case .scanSingle:
+            if CameraKitDeviceEnvironment.supportsDocumentScanner() {
+                return .scannerSingle
+            } else {
+                return .picker(allowsMultiple: false)
+            }
+        case .scanBatch:
+            if CameraKitDeviceEnvironment.supportsDocumentScanner() {
+                return .scannerBatch
+            } else {
+                return .picker(allowsMultiple: true)
+            }
+        case .realTime, .photo, .photoWithCrop:
+            if CameraKitDeviceEnvironment.shouldFallbackToPicker(for: configuration.mode) {
+                return .picker(allowsMultiple: CameraKitDeviceEnvironment.allowsMultipleSelection(for: configuration.mode))
+            } else {
+                return .camera
+            }
+        }
     }
 
     var flashLabel: String {
@@ -240,19 +494,53 @@ final class CameraKitViewModel: NSObject, ObservableObject {
         }
     }
 
+    var supportsPhotoPicker: Bool {
+        #if canImport(PhotosUI)
+        #if targetEnvironment(macCatalyst)
+        if #available(macCatalyst 14.0, *) {
+            return true
+        } else {
+            return false
+        }
+        #else
+        if #available(iOS 14.0, *) {
+            return true
+        } else {
+            return false
+        }
+        #endif
+        #else
+        return false
+        #endif
+    }
+
+    var shouldShowPhotoLibraryButton: Bool {
+        configuration.allowsPhotoLibraryImport && supportsPhotoPicker
+    }
+
+    private var shouldPresentManualCrop: Bool {
+        configuration.mode == .photoWithCrop || configuration.allowsPostCaptureCropping
+    }
+
     func start() {
-        captureCoordinator.startSession()
+        if flow == .camera {
+            captureCoordinator?.startSession()
+            #if !targetEnvironment(macCatalyst)
+            maybePromptForContinuity()
+            #endif
+        }
     }
 
     func stop() {
-        captureCoordinator.stopSession()
+        captureCoordinator?.stopSession()
     }
 
     func capture() {
         guard !isProcessing else { return }
+        guard flow == .camera else { return }
         isProcessing = true
-        captureCoordinator.setFlashMode(flashMode)
-        captureCoordinator.capturePhoto()
+        captureCoordinator?.setFlashMode(flashMode)
+        captureCoordinator?.capturePhoto()
     }
 
     func cancelFlow() {
@@ -269,16 +557,57 @@ final class CameraKitViewModel: NSObject, ObservableObject {
     }
 
     func flipCamera() {
-        captureCoordinator.flipCamera()
+        captureCoordinator?.flipCamera()
     }
 
-    func presentPhotoPicker() {
-        isPhotoPickerPresented = true
-    }
+    var photoPickerSelectionLimit: Int { currentPhotoPickerSelectionLimit }
 
-    func handleImportedImage(_ image: UIImage) {
+    func presentPhotoPicker(allowsMultiple: Bool = false) {
+        guard supportsPhotoPicker else {
+            isPhotoPickerPresented = false
+            return
+        }
+        #if canImport(PhotosUI)
+        if #available(iOS 14.0, macCatalyst 14.0, *) {
+            currentPhotoPickerSelectionLimit = allowsMultiple ? 0 : 1
+            isPhotoPickerPresented = true
+        } else {
+            isPhotoPickerPresented = false
+        }
+        #else
         isPhotoPickerPresented = false
-        process(image: image, detection: nil, isFromLibrary: true)
+        #endif
+    }
+
+    func presentFileImporter() {
+        isFileImporterPresented = true
+    }
+
+    func handleImportedImages(_ images: [UIImage]) {
+        isPhotoPickerPresented = false
+        processImported(images: images, isFromLibrary: true)
+    }
+
+    func handleImportedFiles(urls: [URL]) {
+        guard !urls.isEmpty else {
+            isFileImporterPresented = false
+            return
+        }
+
+        Task.detached(priority: .userInitiated) {
+            var images: [UIImage] = []
+            for url in urls {
+                if let data = try? Data(contentsOf: url),
+                   let image = UIImage(data: data) {
+                    images.append(image)
+                }
+            }
+
+            await MainActor.run {
+                self.isFileImporterPresented = false
+                self.processImported(images: images, isFromLibrary: true)
+            }
+        }
     }
 
     func cancelManualCrop() {
@@ -290,37 +619,110 @@ final class CameraKitViewModel: NSObject, ObservableObject {
         guard let context = manualCropContext, context.id == captureID else { return }
         let quad = CameraKitQuadrilateral.axisAligned(from: rect)
         manualCropContext = nil
-        process(image: context.image, detection: context.detection, manualRectangle: quad, isFromLibrary: false)
+        process(image: context.image,
+                detection: context.detection,
+                manualRectangle: quad,
+                isFromLibrary: context.isFromLibrary)
+    }
+
+    private func processImported(images: [UIImage], isFromLibrary: Bool) {
+        guard !images.isEmpty else { return }
+        if shouldPresentManualCrop, let image = images.first {
+            manualCropContext = ManualCropContext(image: image,
+                                                  initialRect: CGRect(x: 0.1, y: 0.1, width: 0.8, height: 0.8),
+                                                  detection: nil,
+                                                  isFromLibrary: isFromLibrary)
+            return
+        }
+
+        if images.count == 1, let first = images.first {
+            process(image: first, detection: nil, manualRectangle: nil, isFromLibrary: isFromLibrary)
+        } else {
+            process(images: images, isFromLibrary: isFromLibrary)
+        }
+    }
+
+    func handleScannedImages(_ images: [UIImage], allowsMultiple: Bool) {
+        guard !images.isEmpty else {
+            cancelFlow()
+            return
+        }
+        let payload = allowsMultiple ? images : Array(images.prefix(1))
+        process(images: payload, isFromLibrary: false)
+    }
+
+    func handleScannerError(_ error: Error) {
+        handleProcessingFailure(error: .captureFailed(reason: error.localizedDescription),
+                                message: error.localizedDescription)
     }
 
     private func process(image: UIImage,
                          detection: CameraKitQuadrilateral?,
                          manualRectangle: CameraKitQuadrilateral? = nil,
                          isFromLibrary: Bool) {
+        let detections: [CameraKitQuadrilateral?] = [detection]
+        let manualRects: [CameraKitQuadrilateral?] = [manualRectangle]
+        process(images: [image],
+                detections: detections,
+                manualRectangles: manualRects,
+                isFromLibrary: isFromLibrary)
+    }
+
+    private func process(images: [UIImage],
+                         detections: [CameraKitQuadrilateral?] = [],
+                         manualRectangles: [CameraKitQuadrilateral?] = [],
+                         isFromLibrary: Bool) {
+        guard !images.isEmpty else { return }
         isProcessing = true
         Task {
             let pipeline = CameraKitProcessingPipeline(configuration: configuration)
             do {
-                let result = try await pipeline.process(image: image,
-                                                        detection: detection,
-                                                        manualRectangle: manualRectangle,
-                                                        isFromLibrary: isFromLibrary)
+                var processed: [UIImage] = []
+                for (index, image) in images.enumerated() {
+                    let detection = detections.element(at: index) ?? nil
+                    let manual = manualRectangles.element(at: index) ?? nil
+                    let result = try await pipeline.process(image: image,
+                                                            detection: detection,
+                                                            manualRectangle: manual,
+                                                            isFromLibrary: isFromLibrary)
+                    processed.append(result)
+                }
                 isProcessing = false
-                onResult(result)
+                onResult(processed)
             } catch let error as CameraKitError {
-                isProcessing = false
-                alert = CameraAlert(title: CameraKitLocalization.string("camera_kit_error_generic"),
-                                    message: error.localizedDescription)
-                onError(error)
+                handleProcessingFailure(error: error)
             } catch {
-                isProcessing = false
-                let err = CameraKitError.processingFailed
-                alert = CameraAlert(title: CameraKitLocalization.string("camera_kit_error_generic"),
-                                    message: error.localizedDescription)
-                onError(err)
+                handleProcessingFailure(error: .processingFailed, message: error.localizedDescription)
             }
         }
     }
+
+    #if !targetEnvironment(macCatalyst)
+    private func maybePromptForContinuity() {
+        guard flow == .camera else { return }
+        guard UIDevice.current.userInterfaceIdiom == .pad else { return }
+        guard !continuityDevices.isEmpty else { return }
+        continuityPrompt = ContinuityPrompt(devices: continuityDevices)
+    }
+    #endif
+
+    private func handleProcessingFailure(error: CameraKitError, message: String? = nil) {
+        isProcessing = false
+        alert = CameraAlert(title: CameraKitLocalization.string("camera_kit_error_generic"),
+                            message: message ?? error.localizedDescription)
+        onError(error)
+    }
+
+    #if !targetEnvironment(macCatalyst)
+    func useContinuityDevice(_ device: AVCaptureDevice) {
+        continuityPrompt = nil
+        captureCoordinator?.selectDevice(with: device.uniqueID)
+    }
+
+    func dismissContinuityPrompt() {
+        continuityPrompt = nil
+    }
+    #endif
 }
 
 @available(iOS 14.0, *)
@@ -332,9 +734,19 @@ extension CameraKitViewModel: CameraKitCaptureCoordinatorDelegate {
     func captureCoordinator(_ coordinator: CameraKitCaptureCoordinator, didCapture image: UIImage, detection: CameraKitQuadrilateral?) {
         Task { @MainActor in
             self.isProcessing = false
-            if configuration.allowsPostCaptureCropping {
+            if configuration.mode == .realTime {
+                let rect = liveCropRect.clampedRect()
+                let quad = CameraKitQuadrilateral.axisAligned(from: rect)
+                self.process(image: image,
+                             detection: nil,
+                             manualRectangle: quad,
+                             isFromLibrary: false)
+            } else if shouldPresentManualCrop {
                 let rect = detection?.boundingBox ?? CGRect(x: 0.1, y: 0.1, width: 0.8, height: 0.8)
-                self.manualCropContext = ManualCropContext(image: image, initialRect: rect, detection: detection)
+                self.manualCropContext = ManualCropContext(image: image,
+                                                           initialRect: rect,
+                                                           detection: detection,
+                                                           isFromLibrary: false)
             } else {
                 self.process(image: image, detection: detection, manualRectangle: nil, isFromLibrary: false)
             }
@@ -349,40 +761,118 @@ extension CameraKitViewModel: CameraKitCaptureCoordinatorDelegate {
     }
 }
 
+#if canImport(PhotosUI)
+@available(iOS 14.0, macCatalyst 14.0, *)
 struct SystemImagePicker: UIViewControllerRepresentable {
-    var onPick: (UIImage) -> Void
+    var selectionLimit: Int
+    var onPick: ([UIImage]) -> Void
     var onCancel: () -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
 
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var configuration = PHPickerConfiguration(photoLibrary: .shared())
+        configuration.filter = .images
+        configuration.selectionLimit = selectionLimit <= 0 ? 0 : selectionLimit
+        let picker = PHPickerViewController(configuration: configuration)
         picker.delegate = context.coordinator
-        picker.sourceType = .photoLibrary
         return picker
     }
 
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
 
-    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+    final class Coordinator: NSObject, PHPickerViewControllerDelegate {
         let parent: SystemImagePicker
 
         init(parent: SystemImagePicker) {
             self.parent = parent
         }
 
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            picker.dismiss(animated: true)
-            parent.onCancel()
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            guard !results.isEmpty else {
+                picker.dismiss(animated: true) {
+                    self.parent.onCancel()
+                }
+                return
+            }
+
+            let group = DispatchGroup()
+            var images: [UIImage] = []
+
+            for result in results {
+                let provider = result.itemProvider
+                guard provider.canLoadObject(ofClass: UIImage.self) else { continue }
+                group.enter()
+                provider.loadObject(ofClass: UIImage.self) { object, _ in
+                    if let image = object as? UIImage {
+                        images.append(image)
+                    }
+                    group.leave()
+                }
+            }
+
+            group.notify(queue: .main) {
+                picker.dismiss(animated: true) {
+                    if images.isEmpty {
+                        self.parent.onCancel()
+                    } else {
+                        self.parent.onPick(images)
+                    }
+                }
+            }
+        }
+    }
+}
+#endif
+
+struct SystemFilePicker: UIViewControllerRepresentable {
+    var allowsMultipleSelection: Bool
+    var onPick: ([URL]) -> Void
+    var onCancel: () -> Void
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
+        if #available(iOS 14.0, macCatalyst 14.0, *) {
+            #if canImport(UniformTypeIdentifiers)
+            let picker = UIDocumentPickerViewController(forOpeningContentTypes: [UTType.image], asCopy: true)
+            picker.delegate = context.coordinator
+            picker.allowsMultipleSelection = allowsMultipleSelection
+            return picker
+            #else
+            let picker = UIDocumentPickerViewController(documentTypes: ["public.image"], in: .import)
+            picker.delegate = context.coordinator
+            picker.allowsMultipleSelection = allowsMultipleSelection
+            return picker
+            #endif
+        } else {
+            #if canImport(MobileCoreServices)
+            let legacyType = kUTTypeImage as String
+            #else
+            let legacyType = "public.image"
+            #endif
+            let picker = UIDocumentPickerViewController(documentTypes: [legacyType], in: .import)
+            picker.delegate = context.coordinator
+            picker.allowsMultipleSelection = allowsMultipleSelection
+            return picker
+        }
+    }
+
+    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
+
+    final class Coordinator: NSObject, UIDocumentPickerDelegate {
+        let parent: SystemFilePicker
+
+        init(parent: SystemFilePicker) {
+            self.parent = parent
         }
 
-        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
-            picker.dismiss(animated: true)
-            if let image = info[.originalImage] as? UIImage {
-                parent.onPick(image)
-            } else {
-                parent.onCancel()
-            }
+        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+            parent.onPick(urls)
+        }
+
+        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+            parent.onCancel()
         }
     }
 }

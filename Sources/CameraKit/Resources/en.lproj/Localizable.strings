@@ -7,6 +7,7 @@
 "camera_kit_permission_denied" = "Camera access is required. Please enable it in Settings.";
 "camera_kit_error_generic" = "Something went wrong. Please try again.";
 "camera_kit_album_import" = "Import from Photos";
+"camera_kit_file_import" = "Import from Files";
 "camera_kit_processing" = "Processing…";
 "camera_kit_camera_unavailable" = "Camera is not available on this device.";
 "camera_kit_live_detection" = "Align document inside the frame";
@@ -14,3 +15,10 @@
 "camera_kit_flash_auto" = "Auto";
 "camera_kit_flash_on" = "On";
 "camera_kit_flash_off" = "Off";
+"camera_kit_scanner_launching" = "Launching scanner…";
+"camera_kit_picker_title" = "Choose Content Source";
+"camera_kit_picker_subtitle" = "Camera capture is unavailable. Please pick items from Photos or Files.";
+"camera_kit_picker_multi_hint" = "Select multiple items";
+"camera_kit_picker_single_hint" = "Select a single item";
+"camera_kit_select_device" = "Select capture device";
+"camera_kit_use_current_device" = "Use this device";

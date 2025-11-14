@@ -40,52 +40,9 @@ public struct CameraKitQuadrilateral: Equatable, Codable, Sendable {
     }
 }
 
-public struct CameraKitMetadata: Equatable, Codable, Sendable {
-    public var timestamp: Date
-    public var deviceOrientation: Int
-    public var isFromPhotoLibrary: Bool
-    public var extras: [String: String]
-
-    public init(timestamp: Date = Date(),
-                deviceOrientation: Int = 0,
-                isFromPhotoLibrary: Bool = false,
-                extras: [String: String] = [:]) {
-        self.timestamp = timestamp
-        self.deviceOrientation = deviceOrientation
-        self.isFromPhotoLibrary = isFromPhotoLibrary
-        self.extras = extras
-    }
-}
-
 #if canImport(UIKit)
-public struct CameraKitResult {
-    public let processedImage: UIImage
-    public let originalImage: UIImage?
-    public let detectedRectangle: CameraKitQuadrilateral?
-    public let adjustedRectangle: CameraKitQuadrilateral?
-    public let enhancement: CameraKitEnhancement
-    public let metadata: CameraKitMetadata
-    public let context: CameraKitContext?
-    public let jpegData: Data?
-
-    public init(processedImage: UIImage,
-                originalImage: UIImage?,
-                detectedRectangle: CameraKitQuadrilateral?,
-                adjustedRectangle: CameraKitQuadrilateral?,
-                enhancement: CameraKitEnhancement,
-                metadata: CameraKitMetadata,
-                context: CameraKitContext?,
-                jpegData: Data?) {
-        self.processedImage = processedImage
-        self.originalImage = originalImage
-        self.detectedRectangle = detectedRectangle
-        self.adjustedRectangle = adjustedRectangle
-        self.enhancement = enhancement
-        self.metadata = metadata
-        self.context = context
-        self.jpegData = jpegData
-    }
-}
+/// Unified payload returned by CameraKit flows.
+public typealias CameraKitResult = [UIImage]
 #endif
 
 public enum CameraKitError: Error, Equatable, Sendable {

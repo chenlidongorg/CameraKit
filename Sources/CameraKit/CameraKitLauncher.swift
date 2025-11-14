@@ -8,13 +8,13 @@ import UIKit
 public struct CameraKitLauncher<Label: View>: View {
     @State private var isPresenting = false
     private let configuration: CameraKitConfiguration
-    private let onResult: (CameraKitResult) -> Void
+    private let onResult: ([UIImage]) -> Void
     private let onCancel: () -> Void
     private let onError: (CameraKitError) -> Void
     private let label: () -> Label
 
     public init(configuration: CameraKitConfiguration,
-                onResult: @escaping (CameraKitResult) -> Void,
+                onResult: @escaping ([UIImage]) -> Void,
                 onCancel: @escaping () -> Void = {},
                 onError: @escaping (CameraKitError) -> Void,
                 @ViewBuilder label: @escaping () -> Label) {
@@ -47,12 +47,12 @@ public struct CameraKitLauncher<Label: View>: View {
 @available(iOS 14.0, *)
 public struct CameraKitLauncherButton: View {
     private let configuration: CameraKitConfiguration
-    private let onResult: (CameraKitResult) -> Void
+    private let onResult: ([UIImage]) -> Void
     private let onCancel: () -> Void
     private let onError: (CameraKitError) -> Void
 
     public init(configuration: CameraKitConfiguration,
-                onResult: @escaping (CameraKitResult) -> Void,
+                onResult: @escaping ([UIImage]) -> Void,
                 onCancel: @escaping () -> Void = {},
                 onError: @escaping (CameraKitError) -> Void) {
         self.configuration = configuration

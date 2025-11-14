@@ -10,14 +10,14 @@ struct CameraKitProcessingPipeline {
     func process(image: UIImage,
                  detection: CameraKitQuadrilateral?,
                  manualRectangle: CameraKitQuadrilateral?,
-                 isFromLibrary: Bool) async throws -> CameraKitResult {
+                 isFromLibrary: Bool) async throws -> UIImage {
         try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
                     let result = try performProcessing(image: image,
-                                                        detection: detection,
-                                                        manualRectangle: manualRectangle,
-                                                        isFromLibrary: isFromLibrary)
+                                                       detection: detection,
+                                                       manualRectangle: manualRectangle,
+                                                       isFromLibrary: isFromLibrary)
                     continuation.resume(returning: result)
                 } catch {
                     if let kitError = error as? CameraKitError {
@@ -33,53 +33,44 @@ struct CameraKitProcessingPipeline {
     private func performProcessing(image: UIImage,
                                    detection: CameraKitQuadrilateral?,
                                    manualRectangle: CameraKitQuadrilateral?,
-                                   isFromLibrary: Bool) throws -> CameraKitResult {
+                                   isFromLibrary _: Bool) throws -> UIImage {
         var workingImage = image.fixOrientation()
-        let metadata = CameraKitMetadata(timestamp: Date(),
-                                         deviceOrientation: UIDevice.current.orientation.rawValue,
-                                         isFromPhotoLibrary: isFromLibrary,
-                                         extras: configuration.metadata)
 
         let appliedCropSource = manualRectangle ?? detection
-        var adjustedRectangle: CameraKitQuadrilateral? = manualRectangle
-        var detectedRectangle: CameraKitQuadrilateral? = detection
+        let isScanMode = (configuration.mode == .scanSingle || configuration.mode == .scanBatch)
 
-        if configuration.mode == .scan, let quad = appliedCropSource {
+        if isScanMode, let quad = appliedCropSource {
             if let corrected = PerspectiveCorrector.correct(image: workingImage,
                                                             quadrilateral: quad,
                                                             context: context) {
                 workingImage = corrected
-                adjustedRectangle = quad
             }
-        } else if configuration.allowsPostCaptureCropping, let manual = manualRectangle ?? detection {
+        } else if let manual = manualRectangle {
             if let cropped = AxisCropper.crop(image: workingImage, quadrilateral: manual) {
                 workingImage = cropped
-                adjustedRectangle = manual
+            }
+        } else if configuration.allowsPostCaptureCropping, let manual = detection {
+            if let cropped = AxisCropper.crop(image: workingImage, quadrilateral: manual) {
+                workingImage = cropped
             }
         }
 
-        var enhancementUsed: CameraKitEnhancement = .none
         if configuration.enhancement != .none,
            let enhanced = Enhancer.apply(configuration.enhancement, to: workingImage, context: context) {
             workingImage = enhanced
-            enhancementUsed = configuration.enhancement
         }
 
-        if let target = configuration.outputQuality.targetResolution {
+        if let maxWidth = configuration.outputQuality.maxOutputWidth, maxWidth > 0 {
+            let ratio = maxWidth / max(workingImage.size.width, 1)
+            if ratio < 1 {
+                let target = CGSize(width: maxWidth, height: workingImage.size.height * ratio)
+                workingImage = workingImage.scaled(toFit: target)
+            }
+        } else if let target = configuration.outputQuality.targetResolution {
             workingImage = workingImage.scaled(toFit: target)
         }
 
-        let jpeg = workingImage.jpegData(compressionQuality: configuration.outputQuality.compressionQuality)
-        let original = configuration.outputQuality.returnOriginalImage ? image : nil
-
-        return CameraKitResult(processedImage: workingImage,
-                               originalImage: original,
-                               detectedRectangle: detectedRectangle,
-                               adjustedRectangle: adjustedRectangle,
-                               enhancement: enhancementUsed,
-                               metadata: metadata,
-                               context: configuration.context,
-                               jpegData: jpeg)
+        return workingImage
     }
 }
 

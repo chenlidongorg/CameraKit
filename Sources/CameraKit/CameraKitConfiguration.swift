@@ -3,8 +3,16 @@ import Foundation
 
 /// Represents the supported capture modes.
 public enum CameraKitMode: Equatable, Sendable {
+    /// Real-time adjustable capture area prior to shutter.
+    case realTime
+    /// Standard single-shot capture that returns the full frame.
     case photo
-    case scan
+    /// Standard capture followed by a manual crop step.
+    case photoWithCrop
+    /// Single-page scan flow powered by `VNDocumentCameraViewController`.
+    case scanSingle
+    /// Multi-page scan flow powered by `VNDocumentCameraViewController`.
+    case scanBatch
 }
 
 /// Configures the automatic enhancement strategy applied to captured assets.
@@ -26,13 +34,16 @@ public struct CameraKitOutputQuality: Equatable, Sendable {
     public var targetResolution: CGSize?
     public var compressionQuality: CGFloat
     public var returnOriginalImage: Bool
+    public var maxOutputWidth: CGFloat?
 
     public init(targetResolution: CGSize? = nil,
                 compressionQuality: CGFloat = 0.85,
-                returnOriginalImage: Bool = false) {
+                returnOriginalImage: Bool = false,
+                maxOutputWidth: CGFloat? = nil) {
         self.targetResolution = targetResolution
         self.compressionQuality = min(max(compressionQuality, 0.0), 1.0)
         self.returnOriginalImage = returnOriginalImage
+        self.maxOutputWidth = maxOutputWidth
     }
 }
 
