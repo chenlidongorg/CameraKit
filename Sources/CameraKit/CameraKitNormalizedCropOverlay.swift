@@ -6,6 +6,8 @@ struct CameraKitNormalizedCropOverlay: View {
     var dimmingColor: Color = .black.opacity(0.45)
     var strokeColor: Color = .white
     var handleColor: Color = .white
+    @State private var activeHandle: CameraKitCropHandle?
+    @State private var initialRect: CGRect?
 
     var body: some View {
         GeometryReader { geometry in
@@ -29,12 +31,21 @@ struct CameraKitNormalizedCropOverlay: View {
                     .position(handle.position(for: rect))
                     .gesture(DragGesture(minimumDistance: 0)
                         .onChanged { value in
+                            if activeHandle != handle {
+                                activeHandle = handle
+                                initialRect = cropRect
+                            }
+                            guard let startingRect = initialRect else { return }
                             let deltaX = value.translation.width / geometry.size.width
                             let deltaY = value.translation.height / geometry.size.height
                             cropRect = handle
-                                .update(rect: cropRect,
+                                .update(rect: startingRect,
                                         delta: CGSize(width: deltaX, height: deltaY))
                                 .clampedRect()
+                        }
+                        .onEnded { _ in
+                            activeHandle = nil
+                            initialRect = nil
                         })
             }
         }

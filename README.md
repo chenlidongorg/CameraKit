@@ -20,6 +20,7 @@ CameraKit 是一个面向 Swift / SwiftUI 应用的拍摄与扫描组件，提�
 | 配置项 | 作用 | 是否必填 | 默认值 / 建议 |
 | --- | --- | --- | --- |
 | `mode` | `.realTime`（拍前可拖拽取景框）、`.photo`（标准拍摄）、`.photoWithCrop`（拍后裁剪）、`.scanSingle` / `.scanBatch`（基于 `VNDocumentCamera` 的单/多页扫描）。 | 必填 | 根据场景选择合适模式，可随时切换。 |
+| `defaultRealtimeHeight` | `.realTime` 模式下高亮取景框的默认高度（0-1 归一化比例）。 | 可选 | 默认 `0.8`，可按票据/文档纵横比预设，高度可再拖拽调整，宽度固定 `0.8`。 |
 | `enableLiveDetectionOverlay` | 实时显示检测框和提示。 | 可选 | 默认 `true`，用于辅助取景，关闭后可减少轻微的 Vision 计算开销。 |
 | `allowsPostCaptureCropping` | 是否在结果页弹出手动裁剪。 | 可选 | `.photoWithCrop` 模式默认开启，其余模式按需设置。 |
 | `enhancement` | 输出增强策略：`.none` / `.auto` / `.grayscale`。 | 可选 | 默认 `.auto`。 |

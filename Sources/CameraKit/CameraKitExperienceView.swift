@@ -462,6 +462,9 @@ final class CameraKitViewModel: NSObject, ObservableObject {
 #endif
         self.flashMode = configuration.defaultFlashMode
         super.init()
+        if configuration.mode == .realTime {
+            self.liveCropRect = CameraKitViewModel.initialLiveCropRect(for: configuration)
+        }
         captureCoordinator?.delegate = self
     }
 
@@ -486,6 +489,14 @@ final class CameraKitViewModel: NSObject, ObservableObject {
                 return .camera
             }
         }
+    }
+
+    private static func initialLiveCropRect(for configuration: CameraKitConfiguration) -> CGRect {
+        let width: CGFloat = 0.8
+        let height = configuration.defaultRealtimeHeight
+        let x = max(0, (1 - width) / 2)
+        let y = max(0, (1 - height) / 2)
+        return CGRect(x: x, y: y, width: width, height: height).clampedRect()
     }
 
     var flashLabel: String {

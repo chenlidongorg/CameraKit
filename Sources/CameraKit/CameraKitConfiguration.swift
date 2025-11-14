@@ -65,6 +65,8 @@ public struct CameraKitConfiguration: Equatable, Sendable {
     public var outputQuality: CameraKitOutputQuality
     public var context: CameraKitContext?
     public var defaultFlashMode: CameraKitFlashMode
+    /// Normalized height (0-1) used to initialize the highlighted capture area in `.realTime` mode.
+    public var defaultRealtimeHeight: CGFloat
     public var metadata: [String: String]
 
     public init(mode: CameraKitMode = .photo,
@@ -75,6 +77,7 @@ public struct CameraKitConfiguration: Equatable, Sendable {
                 outputQuality: CameraKitOutputQuality = .init(),
                 context: CameraKitContext? = nil,
                 defaultFlashMode: CameraKitFlashMode = .auto,
+                defaultRealtimeHeight: CGFloat = 0.8,
                 metadata: [String: String] = [:]) {
         self.mode = mode
         self.enableLiveDetectionOverlay = enableLiveDetectionOverlay
@@ -84,6 +87,7 @@ public struct CameraKitConfiguration: Equatable, Sendable {
         self.outputQuality = outputQuality
         self.context = context
         self.defaultFlashMode = defaultFlashMode
+        self.defaultRealtimeHeight = min(max(defaultRealtimeHeight, 0.05), 1.0)
         self.metadata = metadata
     }
 }
