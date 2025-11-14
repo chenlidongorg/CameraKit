@@ -534,26 +534,43 @@ final class CameraKitViewModel: NSObject, ObservableObject {
         }
 
         let rect = liveCropRect.clampedRect()
-        let viewSize = previewSize
-        let viewRect = rect.denormalized(in: viewSize)
-        let scale = max(viewSize.width / imageSize.width,
-                        viewSize.height / imageSize.height)
-        let scaledWidth = imageSize.width * scale
-        let scaledHeight = imageSize.height * scale
-        let xOffset = (scaledWidth - viewSize.width) / 2
-        let yOffset = (scaledHeight - viewSize.height) / 2
-        let mappedRect = CGRect(x: viewRect.origin.x + xOffset,
-                                y: viewRect.origin.y + yOffset,
+        let viewRect = rect.denormalized(in: previewSize)
+        let previewAspect = previewSize.width / previewSize.height
+        let imageAspect = imageSize.width / imageSize.height
+
+        var scale: CGFloat
+        var offsetX: CGFloat = 0
+        var offsetY: CGFloat = 0
+
+        if imageAspect > previewAspect {
+            scale = previewSize.height / imageSize.height
+            let scaledWidth = imageSize.width * scale
+            offsetX = (scaledWidth - previewSize.width) / 2
+        } else {
+            scale = previewSize.width / imageSize.width
+            let scaledHeight = imageSize.height * scale
+            offsetY = (scaledHeight - previewSize.height) / 2
+        }
+
+        let scaledRect = CGRect(x: viewRect.origin.x + offsetX,
+                                y: viewRect.origin.y + offsetY,
                                 width: viewRect.width,
                                 height: viewRect.height)
-        let imageRect = CGRect(x: mappedRect.origin.x / scale,
-                               y: mappedRect.origin.y / scale,
-                               width: mappedRect.width / scale,
-                               height: mappedRect.height / scale)
+        let imageRect = CGRect(x: scaledRect.origin.x / scale,
+                               y: scaledRect.origin.y / scale,
+                               width: scaledRect.width / scale,
+                               height: scaledRect.height / scale)
         let normalized = CGRect(x: imageRect.origin.x / imageSize.width,
                                 y: imageRect.origin.y / imageSize.height,
                                 width: imageRect.width / imageSize.width,
                                 height: imageRect.height / imageSize.height)
+        logLiveCropDebug(previewRect: viewRect,
+                         scaledRect: scaledRect,
+                         imageRect: imageRect,
+                         normalizedRect: normalized,
+                         scale: scale,
+                         offsets: (offsetX, offsetY),
+                         imageSize: imageSize)
         return normalized.clampedRect()
     }
 
@@ -793,6 +810,27 @@ final class CameraKitViewModel: NSObject, ObservableObject {
         alert = CameraAlert(title: CameraKitLocalization.string("camera_kit_error_generic"),
                             message: message ?? error.localizedDescription)
         onError(error)
+    }
+
+    private var shouldLogLiveCrop: Bool {
+        guard let flag = configuration.metadata["log_live_crop"]?.lowercased() else { return false }
+        return flag == "1" || flag == "true" || flag == "yes"
+    }
+
+    private func logLiveCropDebug(previewRect: CGRect,
+                                  scaledRect: CGRect,
+                                  imageRect: CGRect,
+                                  normalizedRect: CGRect,
+                                  scale: CGFloat,
+                                  offsets: (x: CGFloat, y: CGFloat),
+                                  imageSize: CGSize) {
+        guard shouldLogLiveCrop else { return }
+        let message = """
+        [CameraKit][LiveCrop] previewSize=\(previewSize), imageSize=\(imageSize), scale=\(scale), \
+offsetX=\(offsets.x), offsetY=\(offsets.y), previewRect=\(previewRect), scaledRect=\(scaledRect), \
+imageRect=\(imageRect), normalizedRect=\(normalizedRect)
+"""
+        print(message)
     }
 
     #if !targetEnvironment(macCatalyst)
