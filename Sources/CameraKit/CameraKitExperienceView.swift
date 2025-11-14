@@ -109,8 +109,10 @@ private struct CameraKitExperienceContent: View {
     private var cameraExperience: some View {
         ZStack {
             if let session = viewModel.session {
-                CameraKitPreviewView(session: session)
-                    .edgesIgnoringSafeArea(.all)
+                CameraKitMeasuredPreviewView(session: session) { size in
+                    viewModel.updatePreviewSize(size)
+                }
+                .edgesIgnoringSafeArea(.all)
             } else {
                 Color.black.edgesIgnoringSafeArea(.all)
             }
@@ -118,18 +120,15 @@ private struct CameraKitExperienceContent: View {
             if viewModel.configuration.enableLiveDetectionOverlay, let detection = viewModel.detection {
                 DetectionOverlayShape(quadrilateral: detection)
                     .stroke(Color.green.opacity(0.8), lineWidth: 2)
-                    .padding()
+                    .ignoresSafeArea()
             }
 
             if viewModel.configuration.mode == .realTime {
                 CameraKitNormalizedCropOverlay(cropRect: $viewModel.liveCropRect,
                                                dimmingColor: Color.black.opacity(0.1),
                                                strokeColor: .yellow,
-                                               handleColor: .white,
-                                               onGeometryChange: { size in
-                                                   viewModel.updatePreviewSize(size)
-                                               })
-                    .padding()
+                                               handleColor: .white)
+                    .ignoresSafeArea()
             }
 
             overlayControls
@@ -382,6 +381,29 @@ private struct DetectionOverlayShape: Shape {
         }
         path.addLine(to: first)
         return path
+    }
+}
+
+@available(iOS 14.0, *)
+private struct CameraKitMeasuredPreviewView: View {
+    let session: AVCaptureSession
+    let onSizeChange: (CGSize) -> Void
+
+    var body: some View {
+        GeometryReader { geometry in
+            CameraKitPreviewView(session: session)
+                .onAppear { reportSize(geometry.size) }
+                .onChange(of: geometry.size) { newValue in
+                    reportSize(newValue)
+                }
+        }
+    }
+
+    private func reportSize(_ size: CGSize) {
+        guard size.width > 0, size.height > 0 else { return }
+        DispatchQueue.main.async {
+            onSizeChange(size)
+        }
     }
 }
 
