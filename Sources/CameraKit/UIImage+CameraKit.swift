@@ -11,6 +11,16 @@ extension UIImage {
         return normalized ?? self
     }
 
+    /// Returns the image size as it appears on screen, compensating for EXIF orientation.
+    var orientationAdjustedSize: CGSize {
+        switch imageOrientation {
+        case .left, .leftMirrored, .right, .rightMirrored:
+            return CGSize(width: size.height, height: size.width)
+        default:
+            return size
+        }
+    }
+
     func scaled(toFit target: CGSize) -> UIImage {
         guard target.width > 0, target.height > 0 else { return self }
         let aspectWidth = target.width / size.width

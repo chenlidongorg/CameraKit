@@ -525,7 +525,7 @@ final class CameraKitViewModel: NSObject, ObservableObject {
         return CGRect(x: x, y: y, width: width, height: height).clampedRect()
     }
 
-    private func liveCropRectForImage(size imageSize: CGSize) -> CGRect {
+    private func liveCropRectForImage(imageSize: CGSize) -> CGRect {
         guard previewSize.width > 0,
               previewSize.height > 0,
               imageSize.width > 0,
@@ -817,7 +817,7 @@ extension CameraKitViewModel: CameraKitCaptureCoordinatorDelegate {
         Task { @MainActor in
             self.isProcessing = false
             if configuration.mode == .realTime {
-                let rect = liveCropRectForImage(size: image.size)
+                let rect = liveCropRectForImage(imageSize: image.orientationAdjustedSize)
                 let quad = CameraKitQuadrilateral.axisAligned(from: rect)
                 self.process(image: image,
                              detection: nil,
