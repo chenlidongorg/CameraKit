@@ -2,6 +2,7 @@
 import SwiftUI
 import UIKit
 
+@available(iOS 14.0, *)
 struct CameraKitCropView: View {
     let image: UIImage
     @State private var cropRect: CGRect

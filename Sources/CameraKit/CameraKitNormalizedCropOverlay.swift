@@ -1,53 +1,70 @@
 #if canImport(UIKit) && (os(iOS) || targetEnvironment(macCatalyst))
 import SwiftUI
 
+@available(iOS 14.0, *)
 struct CameraKitNormalizedCropOverlay: View {
     @Binding var cropRect: CGRect
     var dimmingColor: Color = .black.opacity(0.45)
     var strokeColor: Color = .white
     var handleColor: Color = .white
+    var onGeometryChange: ((CGSize) -> Void)? = nil
     @State private var activeHandle: CameraKitCropHandle?
     @State private var initialRect: CGRect?
 
     var body: some View {
         GeometryReader { geometry in
             let rect = cropRect.denormalized(in: geometry.size)
-            Path { path in
-                path.addRect(CGRect(origin: .zero, size: geometry.size))
-                path.addRect(rect)
-            }
-            .fill(dimmingColor, style: FillStyle(eoFill: true))
+            ZStack {
+                Color.clear
+                    .onAppear { reportGeometryChange(geometry.size) }
+                    .onChange(of: geometry.size) { size in
+                        reportGeometryChange(size)
+                    }
 
-            RoundedRectangle(cornerRadius: 2)
-                .stroke(strokeColor, lineWidth: 2)
-                .frame(width: rect.width, height: rect.height)
-                .position(x: rect.midX, y: rect.midY)
+                Path { path in
+                    path.addRect(CGRect(origin: .zero, size: geometry.size))
+                    path.addRect(rect)
+                }
+                .fill(dimmingColor, style: FillStyle(eoFill: true))
 
-            ForEach(CameraKitCropHandle.allCases, id: \.self) { handle in
-                Circle()
-                    .fill(handleColor)
-                    .frame(width: 20, height: 20)
-                    .shadow(radius: 2)
-                    .position(handle.position(for: rect))
-                    .gesture(DragGesture(minimumDistance: 0)
-                        .onChanged { value in
-                            if activeHandle != handle {
-                                activeHandle = handle
-                                initialRect = cropRect
+                RoundedRectangle(cornerRadius: 2)
+                    .stroke(strokeColor, lineWidth: 2)
+                    .frame(width: rect.width, height: rect.height)
+                    .position(x: rect.midX, y: rect.midY)
+
+                ForEach(CameraKitCropHandle.allCases, id: \.self) { handle in
+                    Circle()
+                        .fill(handleColor)
+                        .frame(width: 20, height: 20)
+                        .shadow(radius: 2)
+                        .position(handle.position(for: rect))
+                        .gesture(DragGesture(minimumDistance: 0)
+                            .onChanged { value in
+                                if activeHandle != handle {
+                                    activeHandle = handle
+                                    initialRect = cropRect
+                                }
+                                guard let startingRect = initialRect else { return }
+                                let deltaX = value.translation.width / geometry.size.width
+                                let deltaY = value.translation.height / geometry.size.height
+                                cropRect = handle
+                                    .update(rect: startingRect,
+                                            delta: CGSize(width: deltaX, height: deltaY))
+                                    .clampedRect()
                             }
-                            guard let startingRect = initialRect else { return }
-                            let deltaX = value.translation.width / geometry.size.width
-                            let deltaY = value.translation.height / geometry.size.height
-                            cropRect = handle
-                                .update(rect: startingRect,
-                                        delta: CGSize(width: deltaX, height: deltaY))
-                                .clampedRect()
-                        }
-                        .onEnded { _ in
-                            activeHandle = nil
-                            initialRect = nil
-                        })
+                            .onEnded { _ in
+                                activeHandle = nil
+                                initialRect = nil
+                            })
+                }
             }
+        }
+    }
+
+    private func reportGeometryChange(_ size: CGSize) {
+        guard let onGeometryChange else { return }
+        DispatchQueue.main.async {
+            onGeometryChange(size)
         }
     }
 }

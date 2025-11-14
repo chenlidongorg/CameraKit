@@ -123,9 +123,12 @@ private struct CameraKitExperienceContent: View {
 
             if viewModel.configuration.mode == .realTime {
                 CameraKitNormalizedCropOverlay(cropRect: $viewModel.liveCropRect,
-                                               dimmingColor: Color.black.opacity(0.25),
+                                               dimmingColor: Color.black.opacity(0.1),
                                                strokeColor: .yellow,
-                                               handleColor: .white)
+                                               handleColor: .white,
+                                               onGeometryChange: { size in
+                                                   viewModel.updatePreviewSize(size)
+                                               })
                     .padding()
             }
 
@@ -403,6 +406,7 @@ final class CameraKitViewModel: NSObject, ObservableObject {
     @Published var continuityPrompt: ContinuityPrompt?
     #endif
     @Published var liveCropRect: CGRect = CGRect(x: 0.1, y: 0.1, width: 0.8, height: 0.8)
+    @Published private(set) var previewSize: CGSize = .zero
 
     let configuration: CameraKitConfiguration
     let flow: Flow
@@ -499,6 +503,38 @@ final class CameraKitViewModel: NSObject, ObservableObject {
         return CGRect(x: x, y: y, width: width, height: height).clampedRect()
     }
 
+    private func liveCropRectForImage(size imageSize: CGSize) -> CGRect {
+        guard previewSize.width > 0,
+              previewSize.height > 0,
+              imageSize.width > 0,
+              imageSize.height > 0 else {
+            return liveCropRect.clampedRect()
+        }
+
+        let rect = liveCropRect.clampedRect()
+        let viewSize = previewSize
+        let viewRect = rect.denormalized(in: viewSize)
+        let scale = max(viewSize.width / imageSize.width,
+                        viewSize.height / imageSize.height)
+        let scaledWidth = imageSize.width * scale
+        let scaledHeight = imageSize.height * scale
+        let xOffset = (scaledWidth - viewSize.width) / 2
+        let yOffset = (scaledHeight - viewSize.height) / 2
+        let mappedRect = CGRect(x: viewRect.origin.x + xOffset,
+                                y: viewRect.origin.y + yOffset,
+                                width: viewRect.width,
+                                height: viewRect.height)
+        let imageRect = CGRect(x: mappedRect.origin.x / scale,
+                               y: mappedRect.origin.y / scale,
+                               width: mappedRect.width / scale,
+                               height: mappedRect.height / scale)
+        let normalized = CGRect(x: imageRect.origin.x / imageSize.width,
+                                y: imageRect.origin.y / imageSize.height,
+                                width: imageRect.width / imageSize.width,
+                                height: imageRect.height / imageSize.height)
+        return normalized.clampedRect()
+    }
+
     var flashLabel: String {
         switch flashMode {
         case .auto:
@@ -528,6 +564,13 @@ final class CameraKitViewModel: NSObject, ObservableObject {
         #else
         return false
         #endif
+    }
+
+    func updatePreviewSize(_ size: CGSize) {
+        guard size.width > 0, size.height > 0 else { return }
+        if previewSize != size {
+            previewSize = size
+        }
     }
 
     var shouldShowPhotoLibraryButton: Bool {
@@ -752,7 +795,7 @@ extension CameraKitViewModel: CameraKitCaptureCoordinatorDelegate {
         Task { @MainActor in
             self.isProcessing = false
             if configuration.mode == .realTime {
-                let rect = liveCropRect.clampedRect()
+                let rect = liveCropRectForImage(size: image.size)
                 let quad = CameraKitQuadrilateral.axisAligned(from: rect)
                 self.process(image: image,
                              detection: nil,
