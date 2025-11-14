@@ -668,11 +668,7 @@ final class CameraKitViewModel: NSObject, ObservableObject {
                                 y: videoRect.origin.y / bounds.height,
                                 width: videoRect.width / bounds.width,
                                 height: videoRect.height / bounds.height)
-        if normalized.width > 0, normalized.height > 0 {
-            videoContentRect = normalized
-        } else {
-            videoContentRect = CGRect(x: 0, y: 0, width: 1, height: 1)
-        }
+        updateVideoContentRectIfNeeded(normalized)
     }
 
     func updateCropOverlaySize(_ size: CGSize) {
@@ -980,6 +976,27 @@ liveRect(normalized)=\(sourceRect), previewRect=\(previewRect), metadataRect=\(m
             return (origin: .zero, size: overlaySize)
         }
         return (origin, size)
+    }
+
+    private func updateVideoContentRectIfNeeded(_ rect: CGRect) {
+        guard rect.width > 0, rect.height > 0 else {
+            if videoContentRect != CGRect(x: 0, y: 0, width: 1, height: 1) {
+                videoContentRect = CGRect(x: 0, y: 0, width: 1, height: 1)
+            }
+            return
+        }
+        let threshold: CGFloat = 0.0001
+        func close(_ a: CGFloat, _ b: CGFloat) -> Bool {
+            abs(a - b) < threshold
+        }
+        let current = videoContentRect
+        if close(current.origin.x, rect.origin.x),
+           close(current.origin.y, rect.origin.y),
+           close(current.width, rect.width),
+           close(current.height, rect.height) {
+            return
+        }
+        videoContentRect = rect
     }
 
     #if !targetEnvironment(macCatalyst)
