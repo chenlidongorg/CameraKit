@@ -144,6 +144,7 @@ private struct CameraKitExperienceContent: View {
                                                dimmingColor: Color.black.opacity(0.1),
                                                strokeColor: .yellow,
                                                handleColor: .white,
+                                               contentRect: viewModel.videoContentRect,
                                                onGeometryChange: { size in
                                                    viewModel.updateCropOverlaySize(size)
                                                })
@@ -450,6 +451,7 @@ final class CameraKitViewModel: NSObject, ObservableObject {
     @Published var liveCropRect: CGRect = CGRect(x: 0.1, y: 0.1, width: 0.8, height: 0.8)
     @Published private(set) var previewSize: CGSize = .zero
     @Published private(set) var cropOverlaySize: CGSize = .zero
+    @Published private(set) var videoContentRect: CGRect = CGRect(x: 0, y: 0, width: 1, height: 1)
     @Published private(set) var frozenPreviewImage: UIImage?
     @Published private(set) var isPreviewFrozen = false
 
@@ -550,27 +552,33 @@ final class CameraKitViewModel: NSObject, ObservableObject {
     }
 
     private func liveCropRectForImage(imageSize: CGSize) -> CGRect {
-        let canvasSize = cropOverlaySize.width > 0 && cropOverlaySize.height > 0 ? cropOverlaySize : previewSize
-        guard canvasSize.width > 0,
-              canvasSize.height > 0,
+        let overlaySize = cropOverlaySize.width > 0 && cropOverlaySize.height > 0 ? cropOverlaySize : previewSize
+        guard overlaySize.width > 0,
+              overlaySize.height > 0,
               imageSize.width > 0,
               imageSize.height > 0 else {
             return liveCropRect.clampedRect()
         }
 
-        let rect = liveCropRect.clampedRect()
-        let viewRect = rect.denormalized(in: canvasSize)
+        let container = resolvedVideoContainer(in: overlaySize)
+        guard container.size.width > 0, container.size.height > 0 else {
+            return liveCropRect.clampedRect()
+        }
 
-        if let metadataRect = convertToMetadataRect(viewRect: viewRect, canvasSize: canvasSize) {
+        let rect = liveCropRect.clampedRect()
+        let localRect = rect.denormalized(in: container.size)
+        let viewRect = localRect.offsetBy(dx: container.origin.x, dy: container.origin.y)
+
+        if let metadataRect = convertToMetadataRect(viewRect: viewRect, canvasSize: overlaySize) {
             logLiveCropMetadata(sourceRect: rect,
-                                canvasSize: canvasSize,
+                                canvasSize: container.size,
                                 previewRect: viewRect,
                                 metadataRect: metadataRect,
                                 imageSize: imageSize)
             return metadataRect.clampedRect()
         }
 
-        let previewAspect = canvasSize.width / canvasSize.height
+        let previewAspect = container.size.width / container.size.height
         let imageAspect = imageSize.width / imageSize.height
 
         var scale: CGFloat
@@ -578,19 +586,19 @@ final class CameraKitViewModel: NSObject, ObservableObject {
         var offsetY: CGFloat = 0
 
         if imageAspect > previewAspect {
-            scale = canvasSize.height / imageSize.height
+            scale = container.size.height / imageSize.height
             let scaledWidth = imageSize.width * scale
-            offsetX = (scaledWidth - canvasSize.width) / 2
+            offsetX = (scaledWidth - container.size.width) / 2
         } else {
-            scale = canvasSize.width / imageSize.width
+            scale = container.size.width / imageSize.width
             let scaledHeight = imageSize.height * scale
-            offsetY = (scaledHeight - canvasSize.height) / 2
+            offsetY = (scaledHeight - container.size.height) / 2
         }
 
-        let scaledRect = CGRect(x: viewRect.origin.x + offsetX,
-                                y: viewRect.origin.y + offsetY,
-                                width: viewRect.width,
-                                height: viewRect.height)
+        let scaledRect = CGRect(x: localRect.origin.x + offsetX,
+                                y: localRect.origin.y + offsetY,
+                                width: localRect.width,
+                                height: localRect.height)
         let imageRect = CGRect(x: scaledRect.origin.x / scale,
                                y: scaledRect.origin.y / scale,
                                width: scaledRect.width / scale,
@@ -600,8 +608,8 @@ final class CameraKitViewModel: NSObject, ObservableObject {
                                 width: imageRect.width / imageSize.width,
                                 height: imageRect.height / imageSize.height)
         logLiveCropDebug(sourceRect: rect,
-                         canvasSize: canvasSize,
-                         previewRect: viewRect,
+                         canvasSize: container.size,
+                         previewRect: localRect,
                          scaledRect: scaledRect,
                          imageRect: imageRect,
                          normalizedRect: normalized,
@@ -652,6 +660,18 @@ final class CameraKitViewModel: NSObject, ObservableObject {
     func updatePreviewLayer(_ layer: AVCaptureVideoPreviewLayer) {
         if previewLayer !== layer {
             previewLayer = layer
+        }
+        let bounds = layer.bounds
+        guard bounds.width > 0, bounds.height > 0 else { return }
+        let videoRect = layer.layerRectConverted(fromMetadataOutputRect: CGRect(x: 0, y: 0, width: 1, height: 1))
+        let normalized = CGRect(x: videoRect.origin.x / bounds.width,
+                                y: videoRect.origin.y / bounds.height,
+                                width: videoRect.width / bounds.width,
+                                height: videoRect.height / bounds.height)
+        if normalized.width > 0, normalized.height > 0 {
+            videoContentRect = normalized
+        } else {
+            videoContentRect = CGRect(x: 0, y: 0, width: 1, height: 1)
         }
     }
 
@@ -948,6 +968,18 @@ liveRect(normalized)=\(sourceRect), previewRect=\(previewRect), metadataRect=\(m
                       y: metadata.origin.y,
                       width: metadata.size.width,
                       height: metadata.size.height)
+    }
+
+    private func resolvedVideoContainer(in overlaySize: CGSize) -> (origin: CGPoint, size: CGSize) {
+        let normalized = videoContentRect
+        let origin = CGPoint(x: normalized.origin.x * overlaySize.width,
+                             y: normalized.origin.y * overlaySize.height)
+        let size = CGSize(width: normalized.width * overlaySize.width,
+                          height: normalized.height * overlaySize.height)
+        if size.width <= 0 || size.height <= 0 {
+            return (origin: .zero, size: overlaySize)
+        }
+        return (origin, size)
     }
 
     #if !targetEnvironment(macCatalyst)

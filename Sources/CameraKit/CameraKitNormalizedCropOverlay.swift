@@ -7,13 +7,15 @@ struct CameraKitNormalizedCropOverlay: View {
     var dimmingColor: Color = .black.opacity(0.45)
     var strokeColor: Color = .white
     var handleColor: Color = .white
+    var contentRect: CGRect? = nil
     var onGeometryChange: ((CGSize) -> Void)? = nil
     @State private var activeHandle: CameraKitCropHandle?
     @State private var initialRect: CGRect?
 
     var body: some View {
         GeometryReader { geometry in
-            let rect = cropRect.denormalized(in: geometry.size)
+            let container = resolvedContainerRect(for: geometry.size)
+            let rect = cropRect.denormalized(in: container.size).offsetBy(dx: container.origin.x, dy: container.origin.y)
             ZStack {
                 if let handler = onGeometryChange {
                     Color.clear
@@ -48,8 +50,8 @@ struct CameraKitNormalizedCropOverlay: View {
                                     initialRect = cropRect
                                 }
                                 guard let startingRect = initialRect else { return }
-                                let deltaX = value.translation.width / geometry.size.width
-                                let deltaY = value.translation.height / geometry.size.height
+                                let deltaX = value.translation.width / max(container.width, 1)
+                                let deltaY = value.translation.height / max(container.height, 1)
                                 cropRect = handle
                                     .update(rect: startingRect,
                                             delta: CGSize(width: deltaX, height: deltaY))
@@ -62,6 +64,20 @@ struct CameraKitNormalizedCropOverlay: View {
                 }
             }
         }
+    }
+
+    private func resolvedContainerRect(for geometrySize: CGSize) -> CGRect {
+        guard let normalized = contentRect else {
+            return CGRect(origin: .zero, size: geometrySize)
+        }
+        let origin = CGPoint(x: normalized.origin.x * geometrySize.width,
+                             y: normalized.origin.y * geometrySize.height)
+        let size = CGSize(width: normalized.width * geometrySize.width,
+                          height: normalized.height * geometrySize.height)
+        if size.width <= 0 || size.height <= 0 {
+            return CGRect(origin: .zero, size: geometrySize)
+        }
+        return CGRect(origin: origin, size: size)
     }
 }
 
