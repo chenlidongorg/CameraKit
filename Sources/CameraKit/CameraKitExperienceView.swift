@@ -109,9 +109,13 @@ private struct CameraKitExperienceContent: View {
     private var cameraExperience: some View {
         ZStack {
             if let session = viewModel.session {
-                CameraKitMeasuredPreviewView(session: session) { size in
-                    viewModel.updatePreviewSize(size)
-                }
+                CameraKitMeasuredPreviewView(session: session,
+                                             onSizeChange: { size in
+                                                 viewModel.updatePreviewSize(size)
+                                             },
+                                             onLayerUpdate: { layer in
+                                                 viewModel.updatePreviewLayer(layer)
+                                             })
                 .edgesIgnoringSafeArea(.all)
             } else {
                 Color.black.edgesIgnoringSafeArea(.all)
@@ -403,10 +407,11 @@ private struct DetectionOverlayShape: Shape {
 private struct CameraKitMeasuredPreviewView: View {
     let session: AVCaptureSession
     let onSizeChange: (CGSize) -> Void
+    let onLayerUpdate: (AVCaptureVideoPreviewLayer) -> Void
 
     var body: some View {
         GeometryReader { geometry in
-            CameraKitPreviewView(session: session)
+            CameraKitPreviewView(session: session, onLayerUpdate: onLayerUpdate)
                 .onAppear { reportSize(geometry.size) }
                 .onChange(of: geometry.size) { newValue in
                     reportSize(newValue)
@@ -459,6 +464,7 @@ final class CameraKitViewModel: NSObject, ObservableObject {
     private let continuityDevices: [AVCaptureDevice]
     #endif
     private var currentPhotoPickerSelectionLimit = 1
+    private weak var previewLayer: AVCaptureVideoPreviewLayer?
 
     struct ManualCropContext: Identifiable {
         let id = UUID()
@@ -554,6 +560,16 @@ final class CameraKitViewModel: NSObject, ObservableObject {
 
         let rect = liveCropRect.clampedRect()
         let viewRect = rect.denormalized(in: canvasSize)
+
+        if let metadataRect = convertToMetadataRect(viewRect: viewRect, canvasSize: canvasSize) {
+            logLiveCropMetadata(sourceRect: rect,
+                                canvasSize: canvasSize,
+                                previewRect: viewRect,
+                                metadataRect: metadataRect,
+                                imageSize: imageSize)
+            return metadataRect.clampedRect()
+        }
+
         let previewAspect = canvasSize.width / canvasSize.height
         let imageAspect = imageSize.width / imageSize.height
 
@@ -630,6 +646,12 @@ final class CameraKitViewModel: NSObject, ObservableObject {
         guard size.width > 0, size.height > 0 else { return }
         if previewSize != size {
             previewSize = size
+        }
+    }
+
+    func updatePreviewLayer(_ layer: AVCaptureVideoPreviewLayer) {
+        if previewLayer !== layer {
+            previewLayer = layer
         }
     }
 
@@ -892,6 +914,40 @@ offsetX=\(offsets.x), offsetY=\(offsets.y), liveRect(normalized)=\(sourceRect), 
 scaledRect=\(scaledRect), imageRect=\(imageRect), normalizedRect=\(normalizedRect)
 """
         print(message)
+    }
+
+    private func logLiveCropMetadata(sourceRect: CGRect,
+                                     canvasSize: CGSize,
+                                     previewRect: CGRect,
+                                     metadataRect: CGRect,
+                                     imageSize: CGSize) {
+        guard shouldLogLiveCrop else { return }
+        let message = """
+[CameraKit][LiveCrop][Metadata] overlaySize=\(canvasSize), imageSize=\(imageSize), \
+liveRect(normalized)=\(sourceRect), previewRect=\(previewRect), metadataRect=\(metadataRect)
+"""
+        print(message)
+    }
+
+    private func convertToMetadataRect(viewRect: CGRect, canvasSize: CGSize) -> CGRect? {
+        guard let layer = previewLayer else { return nil }
+        let layerSize = layer.bounds.size
+        guard layerSize.width > 0,
+              layerSize.height > 0,
+              canvasSize.width > 0,
+              canvasSize.height > 0 else { return nil }
+
+        let scaleX = layerSize.width / canvasSize.width
+        let scaleY = layerSize.height / canvasSize.height
+        let layerRect = CGRect(x: viewRect.origin.x * scaleX,
+                               y: viewRect.origin.y * scaleY,
+                               width: viewRect.width * scaleX,
+                               height: viewRect.height * scaleY)
+        let metadata = layer.metadataOutputRectConverted(fromLayerRect: layerRect)
+        return CGRect(x: metadata.origin.x,
+                      y: metadata.origin.y,
+                      width: metadata.size.width,
+                      height: metadata.size.height)
     }
 
     #if !targetEnvironment(macCatalyst)
