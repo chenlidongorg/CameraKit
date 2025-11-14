@@ -13,11 +13,20 @@ extension UIImage {
 
     /// Returns the image size as it appears on screen, compensating for EXIF orientation.
     var orientationAdjustedSize: CGSize {
+        let baseSize: CGSize
+        if let cgImage {
+            // Convert pixel dimensions into points so we match SwiftUI measurements.
+            baseSize = CGSize(width: CGFloat(cgImage.width) / scale,
+                              height: CGFloat(cgImage.height) / scale)
+        } else {
+            baseSize = size
+        }
+
         switch imageOrientation {
         case .left, .leftMirrored, .right, .rightMirrored:
-            return CGSize(width: size.height, height: size.width)
+            return CGSize(width: baseSize.height, height: baseSize.width)
         default:
-            return size
+            return baseSize
         }
     }
 
