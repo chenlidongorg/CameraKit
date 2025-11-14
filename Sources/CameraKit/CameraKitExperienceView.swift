@@ -117,7 +117,19 @@ private struct CameraKitExperienceContent: View {
                 Color.black.edgesIgnoringSafeArea(.all)
             }
 
-            if viewModel.configuration.enableLiveDetectionOverlay, let detection = viewModel.detection {
+            if viewModel.isPreviewFrozen, let frozen = viewModel.frozenPreviewImage {
+                Image(uiImage: frozen)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+                    .ignoresSafeArea()
+                    .transition(.opacity)
+            }
+
+            if viewModel.configuration.enableLiveDetectionOverlay,
+               !viewModel.isPreviewFrozen,
+               let detection = viewModel.detection {
                 DetectionOverlayShape(quadrilateral: detection)
                     .stroke(Color.green.opacity(0.8), lineWidth: 2)
                     .ignoresSafeArea()
@@ -429,6 +441,8 @@ final class CameraKitViewModel: NSObject, ObservableObject {
     #endif
     @Published var liveCropRect: CGRect = CGRect(x: 0.1, y: 0.1, width: 0.8, height: 0.8)
     @Published private(set) var previewSize: CGSize = .zero
+    @Published private(set) var frozenPreviewImage: UIImage?
+    @Published private(set) var isPreviewFrozen = false
 
     let configuration: CameraKitConfiguration
     let flow: Flow
@@ -564,7 +578,8 @@ final class CameraKitViewModel: NSObject, ObservableObject {
                                 y: imageRect.origin.y / imageSize.height,
                                 width: imageRect.width / imageSize.width,
                                 height: imageRect.height / imageSize.height)
-        logLiveCropDebug(previewRect: viewRect,
+        logLiveCropDebug(sourceRect: rect,
+                         previewRect: viewRect,
                          scaledRect: scaledRect,
                          imageRect: imageRect,
                          normalizedRect: normalized,
@@ -643,6 +658,7 @@ final class CameraKitViewModel: NSObject, ObservableObject {
 
     func cancelFlow() {
         stop()
+        unfreezePreviewIfNeeded()
         onCancel()
     }
 
@@ -788,6 +804,7 @@ final class CameraKitViewModel: NSObject, ObservableObject {
                 isProcessing = false
                 onResult(processed)
                 onOriginalImageResult?(images)
+                unfreezePreviewIfNeeded()
             } catch let error as CameraKitError {
                 handleProcessingFailure(error: error)
             } catch {
@@ -809,15 +826,31 @@ final class CameraKitViewModel: NSObject, ObservableObject {
         isProcessing = false
         alert = CameraAlert(title: CameraKitLocalization.string("camera_kit_error_generic"),
                             message: message ?? error.localizedDescription)
+        unfreezePreviewIfNeeded()
         onError(error)
     }
 
-    private var shouldLogLiveCrop: Bool {
-        guard let flag = configuration.metadata["log_live_crop"]?.lowercased() else { return false }
-        return flag == "1" || flag == "true" || flag == "yes"
+    private func freezePreview(with image: UIImage) {
+        guard configuration.mode == .realTime else { return }
+        frozenPreviewImage = image
+        isPreviewFrozen = true
     }
 
-    private func logLiveCropDebug(previewRect: CGRect,
+    private func unfreezePreviewIfNeeded() {
+        guard configuration.mode == .realTime else { return }
+        frozenPreviewImage = nil
+        isPreviewFrozen = false
+    }
+
+    private var shouldLogLiveCrop: Bool {
+        if let flag = configuration.metadata["log_live_crop"]?.lowercased() {
+            return ["1", "true", "yes", "on"].contains(flag)
+        }
+        return configuration.mode == .realTime
+    }
+
+    private func logLiveCropDebug(sourceRect: CGRect,
+                                  previewRect: CGRect,
                                   scaledRect: CGRect,
                                   imageRect: CGRect,
                                   normalizedRect: CGRect,
@@ -826,9 +859,9 @@ final class CameraKitViewModel: NSObject, ObservableObject {
                                   imageSize: CGSize) {
         guard shouldLogLiveCrop else { return }
         let message = """
-        [CameraKit][LiveCrop] previewSize=\(previewSize), imageSize=\(imageSize), scale=\(scale), \
-offsetX=\(offsets.x), offsetY=\(offsets.y), previewRect=\(previewRect), scaledRect=\(scaledRect), \
-imageRect=\(imageRect), normalizedRect=\(normalizedRect)
+[CameraKit][LiveCrop] previewSize=\(previewSize), imageSize=\(imageSize), scale=\(scale), \
+offsetX=\(offsets.x), offsetY=\(offsets.y), liveRect(normalized)=\(sourceRect), previewRect=\(previewRect), \
+scaledRect=\(scaledRect), imageRect=\(imageRect), normalizedRect=\(normalizedRect)
 """
         print(message)
     }
@@ -855,6 +888,7 @@ extension CameraKitViewModel: CameraKitCaptureCoordinatorDelegate {
         Task { @MainActor in
             self.isProcessing = false
             if configuration.mode == .realTime {
+                freezePreview(with: image.fixOrientation())
                 let rect = liveCropRectForImage(imageSize: image.orientationAdjustedSize)
                 let quad = CameraKitQuadrilateral.axisAligned(from: rect)
                 self.process(image: image,
